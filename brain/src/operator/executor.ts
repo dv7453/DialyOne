@@ -96,7 +96,25 @@ async function executeAction(
     return record;
   }
 
-  const result = await registry.execute(action.capability, action.args ?? {}, { signalId: action.signalId });
+  const executeArgs =
+    action.capability === "notify.escalate"
+      ? {
+          title: `Dialy escalate: ${action.playbookId}`,
+          body: [
+            `signal: ${action.signalId}`,
+            `capability: ${action.capability}`,
+            `mode: ${action.mode}`,
+            action.args && Object.keys(action.args).length
+              ? `args: ${JSON.stringify(action.args)}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          ...(action.args ?? {}),
+        }
+      : (action.args ?? {});
+
+  const result = await registry.execute(action.capability, executeArgs, { signalId: action.signalId });
   const status = result.ok ? "executed" : "failed";
   const record: ExecutionRecord = { ...baseRecord(action, status), result };
   await appendOutcome(journal, action, { status, result });

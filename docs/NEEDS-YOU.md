@@ -17,31 +17,33 @@ This is the short list of things only you can provide. The code is prepared to r
 
 ## GitHub (Scene A draft PR)
 
+- [ ] Hosted `flags.github` true (paste env below, redeploy)
 1. GitHub → Settings → Developer settings → Personal access tokens.
 2. Classic: enable `repo`. Fine-grained: Contents + Pull requests on `dv7453/DialyOne`.
 3. On Render env set:
-   - `GITHUB_TOKEN` = the PAT
+   - `GITHUB_TOKEN` = the PAT (or `gh auth token`)
    - `GITHUB_REPO` = `dv7453/DialyOne`
-4. Redeploy. Confirm: `curl -s https://dialyone.onrender.com/v1/operator/capabilities | jq .`
+4. Redeploy. Confirm: `curl -s https://dialyone.onrender.com/v1/operator/capabilities | jq .flags`
 
-Smoke approve of `code.draft_pr` is **dry-run by default** (no real PR).
+Smoke approve of `code.draft_pr` is **dry-run by default** (no real PR). Local dry-run already proven.
 
 ## Composio / Gmail (Scene B draft)
 
-1. Composio dashboard → API key.
+- [ ] Hosted `flags.mail` true
+1. Composio dashboard → API key (or copy from local `~/.rowboat/config/composio.json`).
 2. Connect **Gmail** for your entity/user (use your real Gmail for this first pass).
 3. On Render env set: `COMPOSIO_API_KEY` = that key.
 4. Redeploy. `mail.draft` approve returns a draft payload (`sent: false`); live Composio send stays disabled.
 
 ## Notifications (Scene A oom escalate)
 
-1. BotFather → token for `@Dialy_thebot` (or a new bot).
-2. Message the bot from your account, then:
-   `curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq '.result[-1].message.chat.id'`
+- [ ] Hosted `flags.telegram` true
+1. BotFather → token for `@Dialy_thebot` (local `channels.json` already has a working token).
+2. Chat id: first `allowFrom` entry, or message the bot then `getUpdates`.
 3. On Render env set:
    - `TELEGRAM_BOT_TOKEN`
    - `TELEGRAM_NOTIFY_CHAT_ID`
-4. Redeploy. OOM deploy signals should DM you via Telegram.
+4. Redeploy. OOM deploy signals should DM you via Telegram (local escalate already delivered).
 
 ## Already Done Without These
 
