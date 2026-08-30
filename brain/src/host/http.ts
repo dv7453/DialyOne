@@ -37,14 +37,21 @@ function configPresent(filename: string): boolean {
     return fs.existsSync(path.join(CONFIG_DIR, filename));
 }
 
-function json(res: http.ServerResponse, status: number, body: unknown): void {
+function json(res: http.ServerResponse, status: number, body: unknown, method = "GET"): void {
     const payload = JSON.stringify(body, null, 2);
-    res.writeHead(status, {
+    const headers: http.OutgoingHttpHeaders = {
         "content-type": "application/json; charset=utf-8",
+        "content-length": Buffer.byteLength(payload),
         "access-control-allow-origin": "*",
-        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-methods": "GET, HEAD, POST, OPTIONS",
         "access-control-allow-headers": "content-type, authorization, x-brain-token",
-    });
+    };
+    res.writeHead(status, headers);
+    // Uptime monitors often probe with HEAD — answer without a body.
+    if (method === "HEAD") {
+        res.end();
+        return;
+    }
     res.end(payload);
 }
 
@@ -105,7 +112,7 @@ export function createHostHttpServer(): http.Server {
         if (method === "OPTIONS") {
             res.writeHead(204, {
                 "access-control-allow-origin": "*",
-                "access-control-allow-methods": "GET, POST, OPTIONS",
+                "access-control-allow-methods": "GET, HEAD, POST, OPTIONS",
                 "access-control-allow-headers": "content-type, authorization, x-brain-token",
             });
             res.end();
@@ -117,21 +124,28 @@ export function createHostHttpServer(): http.Server {
             return;
         }
 
-        if (method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
+        const pathname = url.pathname.replace(/\/+$/, "") || "/";
+
+        if ((method === "GET" || method === "HEAD") && (pathname === "/" || pathname === "/health")) {
             const uptimeSec = Math.floor((Date.now() - hostState.startedAt) / 1000);
-            json(res, hostState.bootOk ? 200 : 503, {
-                service: "brain",
-                package: "@x/core",
-                status: hostState.bootOk ? "ok" : "booting_or_failed",
-                bootOk: hostState.bootOk,
-                uptimeSec,
-                model_idle: hostState.modelIdle,
-                routes: PLANNED,
-            });
+            json(
+                res,
+                hostState.bootOk ? 200 : 503,
+                {
+                    service: "brain",
+                    package: "@x/core",
+                    status: hostState.bootOk ? "ok" : "booting_or_failed",
+                    bootOk: hostState.bootOk,
+                    uptimeSec,
+                    model_idle: hostState.modelIdle,
+                    routes: PLANNED,
+                },
+                method,
+            );
             return;
         }
 
-        if (method === "GET" && url.pathname === "/v1/status") {
+        if (method === "GET" && pathname === "/v1/status") {
             let channels;
             try {
                 channels = getChannelsStatus();
