@@ -1,7 +1,4 @@
-// @rowboat/spaces-protocol — the v0 contract between Harbor (the spaces server)
-// and everything that talks to it. See CONTRACT.md (workspace root) for the six
-// wire decisions and the change process. v0 posture: breaking changes are
-// expected and fine, but they happen HERE, via PR — never in a Slack message.
+// @x/spaces-protocol — wire contract for Spaces (Harbor). See CONTRACT.md.
 
 export * from './ids.js';
 export * from './blob.js';

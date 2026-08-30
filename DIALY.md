@@ -44,7 +44,7 @@ Dialy is a **personal AI operator** — push-based presence (notices → acts �
 - Merchant registry / UCP land-grab (consume later; see STRATEGY §8)  
 - Snap-style Dialy phone number (defer)  
 - Expo/store polish before unsupervised proof  
-- BYOK Settings theater; Rowboat cloud/billing  
+- BYOK Settings theater; third-party cloud/billing  
 
 Full strategy: [`STRATEGY.md`](STRATEGY.md).  
 Forward plan + persona scenarios: [`PLAN.md`](PLAN.md).
@@ -53,11 +53,11 @@ Forward plan + persona scenarios: [`PLAN.md`](PLAN.md).
 
 ## 2. Foundation (this repo)
 
-Stripped **Rowboat** → **brain** (`brain/`, `@x/core`) + disposable Electron (`apps/x`) → Dialy foundation.
+**brain** (`brain/`, `@x/core`) + disposable Electron (`apps/x`) → Dialy foundation.
 
 Architecture: [`BRAIN.md`](BRAIN.md) · Agent shortcuts: [`CLAUDE.md`](CLAUDE.md) · Runbook: [`brain/README.md`](brain/README.md) · Deploy: [`brain/deploy/README.md`](brain/deploy/README.md)
 
-**WorkDir:** `~/.dialy` preferred; legacy `~/.rowboat` if present. Override: `DIALY_WORKDIR`.
+**WorkDir:** `~/.dialy` preferred. Override: `DIALY_WORKDIR`. Legacy home dirs still accepted if present.
 
 ---
 
@@ -65,7 +65,7 @@ Architecture: [`BRAIN.md`](BRAIN.md) · Agent shortcuts: [`CLAUDE.md`](CLAUDE.md
 
 1. **One gate at a time** → agent tests → manual script → you approve → next.  
 2. **Presence proof > UI polish.** Unsupervised / phone/web proof beats dashboards.  
-3. Don’t prune connector ecosystem; don’t rebuild Rowboat product UIs.  
+3. Don’t prune connector ecosystem; don’t rebuild removed product UIs.  
 4. Don’t polish Electron (delete later).  
 5. Update this file + STRATEGY when decisions land.  
 6. Park shiny visions (registry, telephony, multi-agent rebuild) until narrow unsupervised loop is real.
@@ -130,7 +130,7 @@ See prior log entries below for detail. Lab loop proven: headless → Telegram w
 
 ### G3 — Spike C Tool side-effect — DONE
 
-**You verified:** `~/.rowboat/g3-proof.txt` = `DIALY-G3-OK`.
+**You verified:** WorkDir `g3-proof.txt` = `DIALY-G3-OK`.
 
 ---
 
@@ -209,7 +209,7 @@ curl -s http://127.0.0.1:8787/v1/operator/playbooks
 # POST signal example:
 # curl -s -X POST http://127.0.0.1:8787/v1/operator/signal -H 'content-type: application/json' \
 #   -d '{"source":"render","type":"deploy.failed","payload":{"attempt":1}}'
-tail -f ~/.rowboat/logs/brain.jsonl
+tail -f ~/.dialy/logs/brain.jsonl
 ```
 
 Docs: [`docs/NEEDS-YOU.md`](docs/NEEDS-YOU.md) · [`docs/OPERATOR.md`](docs/OPERATOR.md) · [`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md)  

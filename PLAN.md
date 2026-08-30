@@ -313,7 +313,7 @@ You said don't babysit. So these are my defaults. Override any of them in one li
 | Escalation channel | **Telegram** (already proven) with a channel-agnostic interface | In-app chat drops in later without touching playbooks |
 | Model routing | Cheap `triage` task model; assistant model only for drafts/fixes | Token discipline from STRATEGY |
 | Secrets | Config/env only, `.gitignore`d, never in the journal | Non-negotiable for a fundable codebase |
-| WorkDir | Keep legacy `~/.rowboat` unless you migrate | Don't break a working setup while you're away |
+| WorkDir | Prefer `~/.dialy` / `DIALY_WORKDIR`; keep existing home dir if already set | Don't break a working setup while you're away |
 
 ---
 

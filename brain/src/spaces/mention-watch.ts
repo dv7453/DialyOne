@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { mentionsMember, type MentionIdentity } from '@x/shared/dist/spaces.js';
-import type { Member, ServerFrame } from '@rowboat/spaces-protocol';
+import type { Member, ServerFrame } from '@x/spaces-protocol';
 import { notifyIfEnabled } from '../application/notification/notifier.js';
 import type { NotifyInput } from '../application/notification/service.js';
 import { WorkDir } from '../config/config.js';

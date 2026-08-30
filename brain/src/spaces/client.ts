@@ -14,7 +14,7 @@ import {
   type Routes,
   type Space,
   type Topic,
-} from '@rowboat/spaces-protocol';
+} from '@x/spaces-protocol';
 import type { z } from 'zod';
 
 // Typed client for one org's render face. Thin by design: every method is one

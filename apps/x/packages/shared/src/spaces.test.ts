@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { containsRowboatAddress, mentionsMember, stripNonAddressRegions } from './spaces.js';
+import { containsDialyAddress, mentionsMember, stripNonAddressRegions } from './spaces.js';
 
 const arjun = { id: '01M0F8S2MC8HYMF4MYWM61MR7B', displayName: 'Arjun Kumar' };
 
@@ -25,7 +25,7 @@ describe('mentionsMember', () => {
   it('does not match a longer name, a cite, or an email', () => {
     expect(mentionsMember('@Arjun Kumaraswamy shipped it', arjun)).toBe(false);
     expect(mentionsMember('> @Arjun Kumar said no', arjun)).toBe(false);
-    expect(mentionsMember('mail arjun@rowboat.com', arjun)).toBe(false);
+    expect(mentionsMember('mail arjun@example.com', arjun)).toBe(false);
     expect(mentionsMember('Arjun Kumar without the at-sign', arjun)).toBe(false);
   });
 
@@ -33,8 +33,8 @@ describe('mentionsMember', () => {
     expect(mentionsMember('@01M0F8S2MC8HYMF4MYWM61MR7B hi', { id: '01M0F8S2MC8HYMF4MYWM61MR7B' })).toBe(true);
   });
 
-  it('leaves @rowboat alone', () => {
-    expect(containsRowboatAddress('@rowboat summarise this')).toBe(true);
-    expect(containsRowboatAddress('email@rowboat.com')).toBe(false);
+  it('recognizes @dialy agent address', () => {
+    expect(containsDialyAddress('@dialy summarise this')).toBe(true);
+    expect(containsDialyAddress('email@example.com')).toBe(false);
   });
 });

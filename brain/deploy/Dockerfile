@@ -9,8 +9,11 @@ COPY apps/harbor/packages/protocol ./apps/harbor/packages/protocol
 COPY apps/x ./apps/x
 COPY brain ./brain
 
+WORKDIR /app/apps/harbor/packages/protocol
+RUN npm install && npm run build
+
 WORKDIR /app/apps/x
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 RUN npm run shared && pnpm --filter @x/core build
 
 ENV BRAIN_HOST=0.0.0.0

@@ -1,4 +1,4 @@
-name: rowboat
+name: dialy
 
 on:
   pull_request:
@@ -28,7 +28,7 @@ jobs:
             apps/x/pnpm-lock.yaml
             apps/harbor/pnpm-lock.yaml
 
-      # apps/x consumes @rowboat/spaces-protocol (shared/core) and the stub
+      # apps/x consumes @x/spaces-protocol (shared/core) and the stub
       # Harbor (core tests) via link: dependencies into apps/harbor — install
       # and build that workspace first or the shared build and core tests fail.
       - name: Build apps/harbor (link deps)

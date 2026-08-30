@@ -1,4 +1,4 @@
-import { ServerFrame, type PresenceState } from '@rowboat/spaces-protocol';
+import { ServerFrame, type PresenceState } from '@x/spaces-protocol';
 
 // The live face, client side: ONE WebSocket per org (CONTRACT.md decision 2),
 // per-space subscriptions, offset-based resume. The socket owns reconnection;

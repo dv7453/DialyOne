@@ -4,7 +4,7 @@ import type { ipc } from "@x/shared";
 
 export type UpdaterStatus = ipc.IPCChannels["updater:status"]["req"];
 
-const REPO = "rowboatlabs/rowboat";
+const REPO = "dv7453/DialyOne";
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
 
 let status: UpdaterStatus = { state: "disabled", version: "", reason: "dev" };

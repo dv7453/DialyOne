@@ -1,6 +1,6 @@
 # Hardware brain slice — agent context
 
-Stripped Rowboat → **Dialy** foundation (personal AI OS for phone). Local agent + Composio + knowledge engine + channels + voice primitives. No hosted Rowboat API. Product UIs (Email/Brain/Code/Spaces/etc.) removed. **Electron (`apps/x`) = temporary test / reference UI only — will be deleted**; real product is iOS/Android.
+**Dialy** foundation (personal AI OS for phone). Local agent + Composio + knowledge engine + channels + voice primitives. No hosted third-party cloud API for the agent. Product UIs (Email/Brain/Code/Spaces/etc.) removed. **Electron (`apps/x`) = temporary test / reference UI only — will be deleted**; real product is iOS/Android.
 
 ## Read first (mandatory for Dialy work)
 
@@ -45,8 +45,8 @@ New chat · Chats · Connect Accounts · Settings · Sync Activity
 
 ## Do not re-add
 
-- `https://api.x.rowboatlabs.com` or any `/v1/composio` / `/v1/llm` / `/v1/voice` proxy
-- Rowboat sign-in, billing, credits
+- Hosted cloud proxies for `/v1/composio` / `/v1/llm` / `/v1/voice`
+- Third-party cloud sign-in, billing, credits
 - Composio via Bearer token; always `x-api-key` to `backend.composio.dev`
 - Email/Graph/Notes/Code/Spaces product UIs (memory/connector engines stay in brain/)
 

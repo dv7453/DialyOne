@@ -8,7 +8,7 @@ import type { ipc as ipcShared } from "@x/shared"
 
 type UpdaterStatus = ipcShared.IPCChannels["updater:status"]["req"]
 
-const RELEASES_URL = "https://github.com/rowboatlabs/rowboat/releases"
+const RELEASES_URL = "https://github.com/dv7453/DialyOne/releases"
 
 /**
  * Bottom-left "Update available" card, shown once an update is staged. By

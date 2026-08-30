@@ -9,7 +9,7 @@ TEMPLATE="$BRAIN_DIR/deploy/launchd/com.dialy.brain.plist.template"
 LABEL="com.dialy.brain"
 DEST="$HOME/Library/LaunchAgents/${LABEL}.plist"
 
-# Prefer Dialy workdir for logs; fall back to legacy.
+# Prefer Dialy workdir for logs; fall back to any pre-existing home workdir.
 if [[ -d "$HOME/.dialy" ]]; then
   LOG_DIR="$HOME/.dialy/logs"
 elif [[ -d "$HOME/.rowboat" ]]; then
@@ -37,7 +37,7 @@ if lsof -tiTCP:8787 -sTCP:LISTEN >/dev/null 2>&1; then
   sleep 1
 fi
 
-# Unload prior agents (Dialy + legacy Rowboat label if present).
+# Unload prior agents (current + any older label).
 launchctl bootout "gui/$(id -u)/${LABEL}" 2>/dev/null || true
 launchctl unload "$DEST" 2>/dev/null || true
 launchctl unload "$HOME/Library/LaunchAgents/com.rowboat.brain.plist" 2>/dev/null || true

@@ -3464,7 +3464,7 @@ const ipcSchemas = {
 
   // ==========================================================================
   // Spaces — shared containers on orgs speaking the spaces protocol.
-  // Wire contract: @rowboat/spaces-protocol (apps/harbor/CONTRACT.md).
+  // Wire contract: @x/spaces-protocol (apps/harbor/CONTRACT.md).
   // Protocol-shaped payloads cross as z.custom<T>() (see spaces.ts header).
   // ==========================================================================
   'spaces:listOrgs': {

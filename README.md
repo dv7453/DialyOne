@@ -1,11 +1,9 @@
-# Dialy foundation (from Rowboat brain slice)
+# Dialy
 
-Local-first agent core extracted from Rowboat → foundation for **Dialy**, a **personal AI operator**.
+Personal AI operator — presence that acts, not a chatbot dashboard.
 
 **Start here:** [`DIALY.md`](DIALY.md) (product + done) · [`PLAN.md`](PLAN.md) (what we’ll do) · [`STRATEGY.md`](STRATEGY.md) (why).  
 Architecture: [`BRAIN.md`](BRAIN.md). Brain runbook: [`brain/README.md`](brain/README.md).
-
-This tree is the foundation for **Dialy** (personal AI operator — presence, not a dashboard):
 
 1. **Operator loop** — wake on events, act, idle; escalate only when needed  
 2. **Multi-app efficiency** — one turn, many apps, without dumping hundreds of tool schemas  
@@ -14,7 +12,7 @@ This tree is the foundation for **Dialy** (personal AI operator — presence, no
 
 Validation face now = **webapp** (not store apps yet). `apps/x` Electron is **test/reference only → delete later**.
 
-## What remains
+## Layout
 
 ```
 DIALY.md                 Product + gates + what is done
@@ -32,8 +30,6 @@ google-setup.md
 BRAIN.md
 ```
 
-Rowboat product UIs (Email inbox, Graph/Notes editors, Code, Spaces, video call, etc.) were removed. Connector + memory **engines** remain in `brain/`. Harbor protocol leftover may still compile for unused Spaces brain code — ignore until extracted.
-
 ## Run (dev UI)
 
 ```bash
@@ -43,9 +39,9 @@ npm run deps
 npm run dev
 ```
 
-Then: **Settings → Models** (or edit `~/.rowboat/config/models.json`) → **Settings → Connections** / **Mobile channels**.
+Then: **Settings → Models** (or edit `~/.dialy/config/models.json`) → **Settings → Connections** / **Mobile channels**.
 
-Headless (Spike A+):
+Headless:
 
 ```bash
 cd brain && npm run start
@@ -56,13 +52,17 @@ Keys live on disk. Full **golden config checklist**: [`brain/README.md`](brain/R
 
 | File | Purpose |
 |------|---------|
-| `~/.rowboat/config/models.json` | LLM providers (v2) |
-| `~/.rowboat/config/composio.json` | `{ "apiKey": "..." }` |
-| `~/.rowboat/config/channels.json` | Telegram / WhatsApp bridges |
+| `~/.dialy/config/models.json` | LLM providers (v2) |
+| `~/.dialy/config/composio.json` | `{ "apiKey": "..." }` |
+| `~/.dialy/config/channels.json` | Telegram / WhatsApp bridges |
 | Google OAuth | follow `google-setup.md` |
-| `~/.rowboat/config/elevenlabs.json` | TTS when you add voice |
-| `~/.rowboat/config/deepgram.json` | STT when you add voice |
-| `~/.rowboat/config/exa-search.json` | optional web search |
+| `~/.dialy/config/elevenlabs.json` | TTS when you add voice |
+| `~/.dialy/config/deepgram.json` | STT when you add voice |
+| `~/.dialy/config/exa-search.json` | optional web search |
+
+## Hosted brain (Render)
+
+See [`brain/deploy/README.md`](brain/deploy/README.md) and [`docs/NEEDS-YOU.md`](docs/NEEDS-YOU.md).
 
 ## Voice later
 

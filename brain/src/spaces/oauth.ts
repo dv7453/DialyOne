@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import * as oauthClient from '../auth/oauth-client.js';
 import { SpacesClient, SpacesRequestError } from './client.js';
 import { getClient, getOrg, listOrgs, upsertOAuthOrg, type OrgRecord } from './orgs.js';
-import type { AcceptInviteResult, ResolveInviteResult } from '@rowboat/spaces-protocol';
+import type { AcceptInviteResult, ResolveInviteResult } from '@x/spaces-protocol';
 
 // The app side of the OAuth journey (spec §4): discovery via the org's
 // RFC 9728 metadata → DCR → PKCE in the SYSTEM browser with a single-use

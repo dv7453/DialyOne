@@ -2,7 +2,7 @@
 
 **OS awake, model asleep.** Electron is optional (pairing/settings only). The always-on process is `brain/dist/host/main.js`.
 
-WorkDir: `~/.dialy` if present, else legacy `~/.rowboat`. Logs: `$WORKDIR/logs/brain.jsonl`.
+WorkDir: `~/.dialy` (or `DIALY_WORKDIR`). Logs: `$WORKDIR/logs/brain.jsonl`.
 
 ---
 
@@ -26,6 +26,7 @@ Render should run from the repository root because `brain/package.json` depends 
 Native Node build/start (Render — no `corepack enable`, filesystem is read-only for /usr/bin):
 
 ```bash
+cd apps/harbor/packages/protocol && npm install && npm run build
 cd apps/x && npx pnpm@9.15.9 install --no-frozen-lockfile && npm run shared && npx pnpm@9.15.9 --filter @x/core build
 cd brain && BRAIN_HOST=0.0.0.0 BRAIN_PORT=${PORT:-8787} node dist/host/main.js
 ```
@@ -87,7 +88,7 @@ Uses absolute `$(which node)` (nvm-safe). Stdout/stderr → `$WORKDIR/logs/brain
 | Unload | `launchctl bootout gui/$(id -u)/com.dialy.brain` |
 | Health | `curl -s http://127.0.0.1:8787/health` |
 
-Legacy label `com.rowboat.brain` is unloaded by the install script if present. Prefer Dialy’s install script over hand-editing the old plist.
+Legacy launch agents (if any) are unloaded by the install script. Prefer Dialy’s install script over hand-editing old plists.
 
 ---
 
@@ -155,5 +156,4 @@ Optional phone stress: send ~10–20 short Telegram pings; confirm replies and f
 
 ## 8. Template only
 
-`launchd/com.dialy.brain.plist.template` — filled by `install-launchd.sh`.  
-`launchd/com.rowboat.brain.plist` — legacy sample; do not use for new installs.
+`launchd/com.dialy.brain.plist.template` — filled by `install-launchd.sh`.

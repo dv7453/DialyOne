@@ -15,10 +15,10 @@ import type {
   ServerFrame,
   Space,
   Topic,
-} from '@rowboat/spaces-protocol';
+} from '@x/spaces-protocol';
 
 // Renderer-facing surface for Spaces. The wire contract's single source of
-// truth is @rowboat/spaces-protocol (see apps/harbor/CONTRACT.md) — this file
+// truth is @x/spaces-protocol (see apps/harbor/CONTRACT.md) — this file
 // only re-exports the types the UI needs and defines the app-local envelopes
 // (org records, the IPC event wrapper). Protocol-shaped payloads cross IPC via
 // z.custom<T>() like the turn spine does: deep validation already happens in
@@ -103,12 +103,12 @@ export interface SpacesBusEvent {
 
 // ---------------------------------------------------------------------------
 // Mention scanning — one implementation for the renderer (composer highlight,
-// @rowboat trigger) and main (mention notifications).
+// @dialy trigger) and main (mention notifications).
 //
-// Address vs. cite rules (ported from buzz's mention scanner): text inside
-// code fences, inline code, and quoted lines is writing ABOUT someone, not
-// addressing them — stripped before scanning. The mention must sit at a word
-// boundary ("email@rowboat.com" never triggers).
+// Address vs. cite rules: text inside code fences, inline code, and quoted
+// lines is writing ABOUT someone, not addressing them — stripped before
+// scanning. The mention must sit at a word boundary ("email@example.com"
+// never triggers).
 // ---------------------------------------------------------------------------
 
 export function stripNonAddressRegions(text: string): string {
@@ -149,7 +149,7 @@ export function mentionsMember(body: string, member: MentionIdentity): boolean {
   return handles.some((handle) => addressRegExp(handle).test(stripped));
 }
 
-/** The @rowboat address — always the speaker's own agent (spec §8). */
-export function containsRowboatAddress(body: string): boolean {
-  return containsMemberAddress(body, 'rowboat');
+/** The @dialy address — always the speaker's own agent (spec §8). */
+export function containsDialyAddress(body: string): boolean {
+  return containsMemberAddress(body, 'dialy');
 }

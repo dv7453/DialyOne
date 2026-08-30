@@ -288,7 +288,7 @@ module.exports = {
                 loadingGif: path.join(__dirname, 'icons/install-loading.gif'),
                 // Add/Remove Programs icon. Must be a remote URL (Squirrel
                 // limitation); defaults to the Atom feather otherwise.
-                iconUrl: 'https://raw.githubusercontent.com/rowboatlabs/rowboat/main/apps/x/apps/main/icons/icon.ico',
+                iconUrl: 'https://raw.githubusercontent.com/dv7453/DialyOne/main/apps/x/apps/main/icons/icon.ico',
                 // Skip the machine-wide MSI deployment stub — it lands on the
                 // GitHub release page next to setup.exe and users grab the
                 // wrong one (it neither launches the app nor auto-updates).

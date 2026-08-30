@@ -1,6 +1,6 @@
-# Connecting Google to Rowboat
+# Connecting Google to Dialy
 
-Rowboat requires Google OAuth credentials (Client ID and Client Secret) to connect to Gmail, Calendar, and Drive. Follow the steps below to generate them.
+Dialy requires Google OAuth credentials (Client ID and Client Secret) to connect to Gmail, Calendar, and Drive. Follow the steps below to generate them.
 
 ---
 
@@ -21,12 +21,11 @@ Go to:
 https://console.cloud.google.com/projectcreate
 
 - Click **Create Project**
-- Give it a name (e.g. `Rowboat Integration`)
+- Give it a name (e.g. `Dialy Integration`)
 - Click **Create**
 
 Once created, make sure the new project is selected in the top project dropdown.
 
-![Select the new project in the dropdown](https://raw.githubusercontent.com/rowboatlabs/rowboat/main/apps/docs/docs/img/google-setup/01-select-project-dropdown.png)
 
 ---
 
@@ -51,7 +50,7 @@ For each API:
 
 - Click **Enable**
 
-    ![Enable the API](https://raw.githubusercontent.com/rowboatlabs/rowboat/main/apps/docs/docs/img/google-setup/02-enable-api.png)
+    ![Enable the API]()
 
 
 ---
@@ -64,7 +63,7 @@ https://console.cloud.google.com/auth/branding
 
 ### App Information
 
-- App name: (e.g. `Rowboat`)
+- App name: (e.g. `Dialy`)
 - User support email: Your email
 
 ### Audience
@@ -79,7 +78,6 @@ Click **Save and Continue** through the remaining steps.
 
 You do NOT need to publish the app — keeping it in **Testing** mode is fine.
 
-![OAuth consent screen](https://raw.githubusercontent.com/rowboatlabs/rowboat/main/apps/docs/docs/img/google-setup/03-oauth-consent-screen.png)
 
 ---
 
@@ -94,11 +92,10 @@ https://console.cloud.google.com/auth/audience
 Under **Test Users**:
 
 - Click **Add Users**
-- Add the email address you plan to connect with Rowboat
+- Add the email address you plan to connect with Dialy
 
 Save changes.
 
-![Add test users](https://raw.githubusercontent.com/rowboatlabs/rowboat/main/apps/docs/docs/img/google-setup/04-add-test-users.png)
 
 ---
 
@@ -116,7 +113,7 @@ Select:
 
 **Web application**
 
-- Name it anything (e.g. `Rowboat Desktop`)
+- Name it anything (e.g. `Dialy Desktop`)
 
 ### Authorized redirect URIs
 
@@ -137,9 +134,8 @@ After creation, Google will show:
 - **Client ID**
 - **Client Secret**
 
-Copy **both values** and paste them into Rowboat when prompted.
+Copy **both values** and paste them into Dialy when prompted.
 
-![Enter credentials in Rowboat](https://raw.githubusercontent.com/rowboatlabs/rowboat/main/apps/docs/docs/img/google-setup/07-enter-credentials.png)
 
 ---
 
