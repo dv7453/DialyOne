@@ -5,39 +5,18 @@
 | Check | Result |
 |-------|--------|
 | `GET /v1/operator/capabilities` | Live |
-| `flags.render` | **true** (Render API env present) |
-| `flags.github` | false — add `GITHUB_TOKEN` + `GITHUB_REPO` on Render |
-| `flags.mail` | false — add `COMPOSIO_API_KEY` on Render |
-| `flags.telegram` | false — add `TELEGRAM_BOT_TOKEN` + `TELEGRAM_NOTIFY_CHAT_ID` on Render |
-| Scene A minor (`deploy.failed` attempt=1) | matched `deploy-sentinel` → pending `deploy.restart` + `code.draft_pr` |
+| `flags.render` | **true** |
+| `flags.github` | **true** |
+| `flags.mail` | **true** |
+| `flags.telegram` | **true** |
+| Scene A minor | `deploy-sentinel` → pending restart + draft_pr |
 | Approve restart | safe block (no live restart) |
-| Approve draft_pr (hosted) | unavailable until GitHub env set |
-| Scene A oom | `needs_human` → `notify.escalate` auto → delivered **console** (Telegram when env set) |
-| Scene B inbox | matched `inbox-draft` → pending `mail.draft`; approve unavailable until Composio env set |
+| Approve draft_pr | **ok**, `dryRun: true`, repo `dv7453/DialyOne` |
+| Scene A oom | escalate delivered **`console` + `telegram`** |
+| Scene B inbox | `mail.draft` approve → **ok**, `provider: composio`, `sent: false` |
 
-## Local adapter proof (keys from `~/.rowboat`, never committed)
+Calendar remains optional (`flags.calendar: false`).
 
-| Adapter | Result |
-|---------|--------|
-| `code.draft_pr` | ok, `dryRun: true`, repo `dv7453/DialyOne` (via `gh auth token`) |
-| `mail.draft` | ok, `provider: composio`, `sent: false` |
-| `notify.escalate` | ok, delivered `console` + **telegram** |
+## Next
 
-## Finish hosted G7 (you)
-
-On Render → dialyone → Environment, copy from local / dashboards (see [`NEEDS-YOU.md`](NEEDS-YOU.md)):
-
-```text
-GITHUB_TOKEN=<gh pat or gh auth token>
-GITHUB_REPO=dv7453/DialyOne
-COMPOSIO_API_KEY=<from ~/.rowboat/config/composio.json>
-TELEGRAM_BOT_TOKEN=<from ~/.rowboat/config/channels.json telegram>
-TELEGRAM_NOTIFY_CHAT_ID=<first allowFrom chat id>
-```
-
-Redeploy, then:
-
-```bash
-curl -s https://dialyone.onrender.com/v1/operator/capabilities | jq .flags
-# expect github/mail/telegram true
-```
+**G6** — validation webapp (chat + preview-approve) against this hosted brain.

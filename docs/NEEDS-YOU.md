@@ -17,33 +17,18 @@ This is the short list of things only you can provide. The code is prepared to r
 
 ## GitHub (Scene A draft PR)
 
-- [ ] Hosted `flags.github` true (paste env below, redeploy)
-1. GitHub → Settings → Developer settings → Personal access tokens.
-2. Classic: enable `repo`. Fine-grained: Contents + Pull requests on `dv7453/DialyOne`.
-3. On Render env set:
-   - `GITHUB_TOKEN` = the PAT (or `gh auth token`)
-   - `GITHUB_REPO` = `dv7453/DialyOne`
-4. Redeploy. Confirm: `curl -s https://dialyone.onrender.com/v1/operator/capabilities | jq .flags`
-
-Smoke approve of `code.draft_pr` is **dry-run by default** (no real PR). Local dry-run already proven.
+- [x] Hosted `flags.github` true (`GITHUB_TOKEN` + `GITHUB_REPO=dv7453/DialyOne`)
+- Smoke approve of `code.draft_pr` is **dry-run by default** (no real PR). Hosted dry-run proven.
 
 ## Composio / Gmail (Scene B draft)
 
-- [ ] Hosted `flags.mail` true
-1. Composio dashboard → API key (or copy from local `~/.rowboat/config/composio.json`).
-2. Connect **Gmail** for your entity/user (use your real Gmail for this first pass).
-3. On Render env set: `COMPOSIO_API_KEY` = that key.
-4. Redeploy. `mail.draft` approve returns a draft payload (`sent: false`); live Composio send stays disabled.
+- [x] Hosted `flags.mail` true (`COMPOSIO_API_KEY`)
+- `mail.draft` approve returns a draft payload (`sent: false`); live Composio send stays disabled.
 
 ## Notifications (Scene A oom escalate)
 
-- [ ] Hosted `flags.telegram` true
-1. BotFather → token for `@Dialy_thebot` (local `channels.json` already has a working token).
-2. Chat id: first `allowFrom` entry, or message the bot then `getUpdates`.
-3. On Render env set:
-   - `TELEGRAM_BOT_TOKEN`
-   - `TELEGRAM_NOTIFY_CHAT_ID`
-4. Redeploy. OOM deploy signals should DM you via Telegram (local escalate already delivered).
+- [x] Hosted `flags.telegram` true (`TELEGRAM_BOT_TOKEN` + `TELEGRAM_NOTIFY_CHAT_ID`)
+- OOM deploy signals deliver via Telegram (hosted escalate delivered `console` + `telegram`).
 
 ## Already Done Without These
 

@@ -8,7 +8,7 @@
 **Why / moat / competitive thesis:** [`STRATEGY.md`](STRATEGY.md).  
 After every completed stage (or gate approval), **update this file**. Do not rely on chat memory alone.
 
-Last updated: **2026-08-30** (G7 operator loop smoke on dialyone; paste GH/Composio/Telegram onto Render for hosted flags)
+Last updated: **2026-08-30** (G7 hosted connectors armed — next G6 webapp)
 
 ---
 
@@ -83,7 +83,7 @@ Architecture: [`BRAIN.md`](BRAIN.md) · Agent shortcuts: [`CLAUDE.md`](CLAUDE.md
 | G4 | Hardening | **DONE** | launchd + Telegram idle |
 | **G5** | **Operator kernel + hosted brain** | **DONE** | https://dialyone.onrender.com/health `bootOk: true`; scenarios 20/20; operator routes |
 | G6 | Validation webapp (in-app chat) | PENDING | Message Dialy; preview-approve UI |
-| **G7** | **Live connectors Scene A+B** | **TESTED** | Loop + Render live; GH/mail/TG proven locally — paste onto Render ([`docs/G7-SMOKE.md`](docs/G7-SMOKE.md)) |
+| **G7** | **Live connectors Scene A+B** | **DONE** | Hosted flags render/github/mail/telegram true; Scene A/B smoke pass ([`docs/G7-SMOKE.md`](docs/G7-SMOKE.md)) |
 | G8 | Unsupervised stretch | PENDING | Real week after hosted brain live |
 
 ### Locked defaults
@@ -173,19 +173,18 @@ See prior log entries below for detail. Lab loop proven: headless → Telegram w
 
 ---
 
-### G7 — Live connectors Scene A+B — TESTED
+### G7 — Live connectors Scene A+B — DONE
 
 **Goal:** Hosted operator loop with Render / GitHub / Gmail / Telegram adapters armed.
 
-**Shipped / verified:**
-- `GET /v1/operator/capabilities` + `operatorAdapters` on `/v1/status` (no secrets)
-- Hosted Scene A minor → approvals for restart + draft_pr; restart safely blocked
-- Hosted Scene A oom → auto escalate (console until Telegram env on Render)
-- Hosted Scene B → `mail.draft` approval path
-- Local proof with WorkDir/`gh` keys: GitHub dry-run, mail draft payload, **Telegram message delivered**
-- Hosted `flags.render: true`; github/mail/telegram still false until env paste
+**Verified on https://dialyone.onrender.com:**
+- `flags`: render, github, mail, telegram all **true**
+- Scene A minor → approvals; draft_pr dry-run against `dv7453/DialyOne`; restart safely blocked
+- Scene A oom → Telegram + console escalate
+- Scene B → `mail.draft` approve (`sent: false`)
+- Docs: [`docs/G7-SMOKE.md`](docs/G7-SMOKE.md), [`docs/NEEDS-YOU.md`](docs/NEEDS-YOU.md)
 
-**Docs:** [`docs/G7-SMOKE.md`](docs/G7-SMOKE.md), updated [`docs/NEEDS-YOU.md`](docs/NEEDS-YOU.md)
+**Next:** G6 validation webapp.
 
 ---
 
@@ -259,6 +258,7 @@ Deploy: [`brain/deploy/README.md`](brain/deploy/README.md)
 | 2026-08-30 | **Extra playbook invoice-followup** | Adjacent SMB pain beyond the example 20 |
 | 2026-08-30 | **Hosted brain live** | https://dialyone.onrender.com — G5 closed; G6 webapp / G7 creds next |
 | 2026-08-30 | **G7 loop smoke** | Capabilities endpoint; Scene A/B on hosted; adapters local-proven; Render env paste remaining for GH/mail/TG |
+| 2026-08-30 | **G7 hosted DONE** | All connector env on Render; draft_pr dry-run + Telegram escalate + mail draft pass |
 ---
 
 ## 9. How to update
