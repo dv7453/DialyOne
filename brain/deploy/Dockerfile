@@ -3,7 +3,7 @@
 FROM node:24-bookworm-slim
 
 WORKDIR /app
-RUN corepack enable
+RUN npm install -g pnpm@9.15.9
 
 COPY apps/harbor/packages/protocol ./apps/harbor/packages/protocol
 COPY apps/x ./apps/x
