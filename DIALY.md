@@ -8,7 +8,7 @@
 **Why / moat / competitive thesis:** [`STRATEGY.md`](STRATEGY.md).  
 After every completed stage (or gate approval), **update this file**. Do not rely on chat memory alone.
 
-Last updated: **2026-08-30** (Operator kernel shipped — awaiting your Needs-you credentials for live Render/GitHub/Gmail)
+Last updated: **2026-08-30** (Hosted brain live at https://dialyone.onrender.com — connectors still Needs-you)
 
 ---
 
@@ -81,7 +81,7 @@ Architecture: [`BRAIN.md`](BRAIN.md) · Agent shortcuts: [`CLAUDE.md`](CLAUDE.md
 | G2 | Telegram wake → idle | **DONE** | Reply + `model_idle` |
 | G3 | One tool side-effect | **DONE** | File on disk |
 | G4 | Hardening | **DONE** | launchd + Telegram idle |
-| **G5** | **Operator kernel + host prep** | **SHIPPED** (live Render = Needs-you) | `npm run scenarios` 20/20; HTTP operator routes; watchdog; render.yaml |
+| **G5** | **Operator kernel + hosted brain** | **DONE** | https://dialyone.onrender.com/health `bootOk: true`; scenarios 20/20; operator routes |
 | G6 | Validation webapp (in-app chat) | PENDING | Message Dialy; preview-approve UI |
 | G7 | Live connectors Scene A+B | PENDING | Paste creds from `docs/NEEDS-YOU.md` |
 | G8 | Unsupervised stretch | PENDING | Real week after hosted brain live |
@@ -150,9 +150,9 @@ See prior log entries below for detail. Lab loop proven: headless → Telegram w
 
 ---
 
-### G5 — Operator kernel + hosting prep — SHIPPED (live deploy = Needs-you)
+### G5 — Operator kernel + hosted brain — DONE
 
-**Goal:** Config-driven operator (not hardcoded personas); scenario harness; host routes; Render/watchdog ready without blocking on secrets.
+**Goal:** Config-driven operator (not hardcoded personas); scenario harness; host routes; always-on hosted brain.
 
 **Shipped:**
 - `brain/src/operator/` — signals → match → triage (rules-first) → policy → journal → executor + approvals
@@ -160,12 +160,12 @@ See prior log entries below for detail. Lab loop proven: headless → Telegram w
 - 20 example playbooks + `invoice-followup` extra; all green via `cd brain && npm run scenarios`
 - Host: seeds playbooks into WorkDir; `POST /v1/operator/signal`, `GET /v1/operator/playbooks`, `GET /v1/operator/approvals`, `POST /v1/operator/approvals/resolve`
 - Watchdog: `npm run watchdog` (external to brain)
-- Deploy prep: `brain/deploy/render.yaml`, Dockerfile path, docs
+- **Live:** [https://dialyone.onrender.com](https://dialyone.onrender.com) — `/health` `bootOk: true`, operator playbooks loaded
 - Docs: [`docs/NEEDS-YOU.md`](docs/NEEDS-YOU.md), [`docs/OPERATOR.md`](docs/OPERATOR.md), [`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md)
 
-**Agent verified:** typecheck green; `src/operator` 18 tests pass; scenarios 20/20 PASS.
+**Agent verified:** typecheck green; scenarios 20/20 PASS; live `/health` + `/v1/status` + `/v1/operator/playbooks` on cellular/public URL.
 
-**You do next (does not require code):** clear [`docs/NEEDS-YOU.md`](docs/NEEDS-YOU.md) — Render deploy + tokens → public `/health` on cellular.
+**You do next:** remaining [`docs/NEEDS-YOU.md`](docs/NEEDS-YOU.md) credentials (`RENDER_API_KEY`, GitHub, Gmail, Telegram) → G7 live connectors. Then G6 webapp.
 
 **Escalation rules v0 (Scene A / B):**
 - **A deploy:** `oom` → needs_human + notify; early attempt → minor → approve-gated restart + draft PR
@@ -241,6 +241,7 @@ Deploy: [`brain/deploy/README.md`](brain/deploy/README.md)
 | 2026-08-30 | **Scenario library is config + fixtures** | Playbook coverage now replays offline with `npm run scenarios` |
 | 2026-08-30 | **Approve executed: operator kernel G5** | Playbooks not hardcoded; Needs-you ledger for live APIs |
 | 2026-08-30 | **Extra playbook invoice-followup** | Adjacent SMB pain beyond the example 20 |
+| 2026-08-30 | **Hosted brain live** | https://dialyone.onrender.com — G5 closed; G6 webapp / G7 creds next |
 ---
 
 ## 9. How to update
