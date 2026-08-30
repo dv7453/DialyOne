@@ -23,10 +23,10 @@ Blueprint: `brain/deploy/render.yaml`.
 
 Render should run from the repository root because `brain/package.json` depends on workspace package `@x/shared` from `apps/x/packages/shared`.
 
-Native Node build/start:
+Native Node build/start (Render — no `corepack enable`, filesystem is read-only for /usr/bin):
 
 ```bash
-cd apps/x && corepack enable && pnpm install --frozen-lockfile && npm run shared && pnpm --filter @x/core build
+cd apps/x && npx pnpm@9.15.9 install --frozen-lockfile && npm run shared && npx pnpm@9.15.9 --filter @x/core build
 cd brain && BRAIN_HOST=0.0.0.0 BRAIN_PORT=${PORT:-8787} node dist/host/main.js
 ```
 
