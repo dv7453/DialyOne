@@ -1,0 +1,77 @@
+{
+  "id": "family-brief",
+  "title": "Family school brief",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.school"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.thread",
+      "args": {
+        "category": "school"
+      }
+    },
+    {
+      "capability": "calendar.today"
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.permissionSlip == true",
+        "class": "needs_human",
+        "reason": "Permission slips require parent approval."
+      },
+      {
+        "when": "signal.payload.eventDays > 0",
+        "class": "minor",
+        "reason": "Upcoming school events can be put on the calendar with approval."
+      },
+      {
+        "when": "signal.payload.newsletter == true",
+        "class": "ignore",
+        "reason": "School newsletters can be logged without action."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "calendar.create",
+        "mode": "approve",
+        "args": {
+          "title": "School event"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "digest": {
+    "stack": ["minor"],
+    "deliver": "0 7 * * *"
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 4,
+    "on_exceed": "escalate"
+  }
+}

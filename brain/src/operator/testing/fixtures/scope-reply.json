@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-scope-reply",
+    "source": "gmail",
+    "type": "email.revision",
+    "createdAt": "2026-08-30T08:08:00.000Z",
+    "payload": {
+      "withinScope": true,
+      "extraCost": 0,
+      "closed": false
+    }
+  },
+  "expect": {
+    "playbookId": "scope-reply",
+    "triageClass": "minor",
+    "actionCapabilities": ["mail.draft", "calendar.create"]
+  }
+}

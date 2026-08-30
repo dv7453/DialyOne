@@ -1,0 +1,12 @@
+{
+    "extends": "../apps/x/tsconfig.base.json",
+    "compilerOptions": {
+        "declaration": false,
+        "outDir": "dist-api",
+        "rootDir": "api",
+        "types": ["node"]
+    },
+    "include": [
+        "api"
+    ]
+}

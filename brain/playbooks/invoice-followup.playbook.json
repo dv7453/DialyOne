@@ -1,0 +1,74 @@
+{
+  "id": "invoice-followup",
+  "title": "Unpaid invoice follow-up",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.invoice_unpaid"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.thread",
+      "args": {
+        "includeHistory": true
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.daysOverdue >= 7",
+        "class": "minor",
+        "reason": "A week-overdue invoice should get an approval-gated follow-up draft."
+      },
+      {
+        "when": "signal.payload.amount >= 5000",
+        "class": "needs_human",
+        "reason": "High-value unpaid invoices need human review before follow-up."
+      },
+      {
+        "when": "signal.payload.paid == true",
+        "class": "ignore",
+        "reason": "Paid invoices should only be logged."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "mail.draft",
+        "mode": "approve",
+        "args": {
+          "intent": "invoice-followup"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "digest": {
+    "stack": ["minor"],
+    "deliver": "0 10 * * 1-5"
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 4,
+    "on_exceed": "escalate"
+  }
+}

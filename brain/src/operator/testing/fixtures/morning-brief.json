@@ -1,0 +1,17 @@
+{
+  "signal": {
+    "id": "sig-morning-brief",
+    "source": "cron",
+    "type": "brief.morning",
+    "createdAt": "2026-08-30T08:03:00.000Z",
+    "payload": {
+      "items": 3,
+      "decisions": 0
+    }
+  },
+  "expect": {
+    "playbookId": "morning-brief",
+    "triageClass": "minor",
+    "actionCapabilities": ["journal.log"]
+  }
+}

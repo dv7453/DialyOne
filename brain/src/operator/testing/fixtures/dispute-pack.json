@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-dispute-pack",
+    "source": "gmail",
+    "type": "email.dispute",
+    "createdAt": "2026-08-30T08:16:00.000Z",
+    "payload": {
+      "evidenceComplete": true,
+      "amount": 250,
+      "duplicate": false
+    }
+  },
+  "expect": {
+    "playbookId": "dispute-pack",
+    "triageClass": "minor",
+    "actionCapabilities": ["mail.draft"]
+  }
+}

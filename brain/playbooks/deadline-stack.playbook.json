@@ -1,0 +1,74 @@
+{
+  "id": "deadline-stack",
+  "title": "Advisor deadline stack",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.advisor"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.thread",
+      "args": {
+        "includeHistory": true
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.deadlineDays <= 2",
+        "class": "needs_human",
+        "reason": "Advisor requests due soon should wake the student."
+      },
+      {
+        "when": "signal.payload.deadlineDays > 2",
+        "class": "minor",
+        "reason": "Future advisor deadlines can be stacked."
+      },
+      {
+        "when": "signal.payload.fyi == true",
+        "class": "ignore",
+        "reason": "FYI advisor emails should be logged only."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "journal.log",
+        "mode": "auto",
+        "args": {
+          "summary": "advisor-deadline"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "digest": {
+    "stack": ["minor"],
+    "deliver": "0 8 * * *"
+  },
+  "budget": {
+    "max_model_calls": 1,
+    "max_tool_rounds": 3,
+    "on_exceed": "escalate"
+  }
+}

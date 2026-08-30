@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template. Prefer: bash brain/deploy/install-launchd.sh
+  Label: com.dialy.brain — KeepAlive restarts the headless host on crash.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dialy.brain</string>
+  <key>WorkingDirectory</key>
+  <string>__BRAIN_DIR__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__BRAIN_DIR__/dist/host/main.js</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>BRAIN_HOST</key>
+    <string>0.0.0.0</string>
+    <key>BRAIN_PORT</key>
+    <string>8787</string>
+    <key>PATH</key>
+    <string>__PATH__</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/brain.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/brain.launchd.err.log</string>
+</dict>
+</plist>

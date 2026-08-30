@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-deal-intake",
+    "source": "gmail",
+    "type": "email.brand_deal",
+    "createdAt": "2026-08-30T08:10:00.000Z",
+    "payload": {
+      "budget": 1200,
+      "exclusivity": false,
+      "spam": false
+    }
+  },
+  "expect": {
+    "playbookId": "deal-intake",
+    "triageClass": "minor",
+    "actionCapabilities": ["mail.draft", "calendar.create"]
+  }
+}

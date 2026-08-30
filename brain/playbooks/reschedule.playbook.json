@@ -1,0 +1,83 @@
+{
+  "id": "reschedule",
+  "title": "No-show reschedule",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.noshow"
+    }
+  ],
+  "context": [
+    {
+      "capability": "calendar.availability",
+      "args": {
+        "windowDays": 14
+      }
+    },
+    {
+      "capability": "mail.thread",
+      "args": {
+        "includeHistory": true
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.firstMiss == true",
+        "class": "minor",
+        "reason": "First no-shows can receive a polite reschedule draft."
+      },
+      {
+        "when": "signal.payload.repeatMisses >= 2",
+        "class": "needs_human",
+        "reason": "Repeat no-shows need human decision."
+      },
+      {
+        "when": "signal.payload.rescheduled == true",
+        "class": "ignore",
+        "reason": "Already-rescheduled no-shows should only be logged."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "mail.draft",
+        "mode": "approve",
+        "args": {
+          "intent": "reschedule"
+        }
+      },
+      {
+        "capability": "calendar.create",
+        "mode": "approve",
+        "args": {
+          "status": "tentative"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 5,
+    "on_exceed": "escalate"
+  }
+}

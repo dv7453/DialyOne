@@ -1,0 +1,74 @@
+{
+  "id": "issue-triage",
+  "title": "GitHub issue triage",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "github",
+      "eventType": "issue.opened"
+    }
+  ],
+  "context": [
+    {
+      "capability": "code.issue_context",
+      "args": {
+        "includeRecentFiles": true
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.goodFirstIssue == true",
+        "class": "minor",
+        "reason": "Small, well-scoped issues can get a draft PR plan."
+      },
+      {
+        "when": "signal.payload.security == true",
+        "class": "needs_human",
+        "reason": "Security issues should wake the maintainer."
+      },
+      {
+        "when": "signal.payload.duplicate == true",
+        "class": "ignore",
+        "reason": "Duplicate issues should only be logged."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "code.draft_pr",
+        "mode": "approve",
+        "args": {
+          "intent": "issue-fix"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "digest": {
+    "stack": ["minor"],
+    "deliver": "0 9 * * 1-5"
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 5,
+    "on_exceed": "escalate"
+  }
+}

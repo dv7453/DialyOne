@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-lead-qualify",
+    "source": "gmail",
+    "type": "email.lead",
+    "createdAt": "2026-08-30T08:14:00.000Z",
+    "payload": {
+      "qualified": true,
+      "budgetKnown": true,
+      "spam": false
+    }
+  },
+  "expect": {
+    "playbookId": "lead-qualify",
+    "triageClass": "minor",
+    "actionCapabilities": ["mail.draft", "calendar.create"]
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "id": "supply-watch",
+  "title": "Supplier delay watch",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.supplier"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.thread",
+      "args": {
+        "category": "supplier"
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.delayHours < 24",
+        "class": "minor",
+        "reason": "Short supplier delays can be logged for the next brief."
+      },
+      {
+        "when": "signal.payload.delayHours >= 24",
+        "class": "needs_human",
+        "reason": "Long supplier delays may affect operations and need escalation."
+      },
+      {
+        "when": "signal.payload.informational == true",
+        "class": "ignore",
+        "reason": "Informational supplier notes do not need action."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "journal.log",
+        "mode": "auto",
+        "args": {
+          "summary": "supplier-watch"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "digest": {
+    "stack": ["minor"],
+    "deliver": "0 8 * * *"
+  },
+  "budget": {
+    "max_model_calls": 1,
+    "max_tool_rounds": 3,
+    "on_exceed": "escalate"
+  }
+}

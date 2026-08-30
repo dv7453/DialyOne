@@ -1,0 +1,77 @@
+{
+  "id": "docs-intake",
+  "title": "Client docs intake",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.client_docs"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.attachments",
+      "args": {
+        "metadataOnly": true
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.missingDocs > 0",
+        "class": "minor",
+        "reason": "Missing client documents should get a follow-up draft."
+      },
+      {
+        "when": "signal.payload.deadlineDays <= 1",
+        "class": "needs_human",
+        "reason": "Near-deadline document gaps need human attention."
+      },
+      {
+        "when": "signal.payload.complete == true",
+        "class": "ignore",
+        "reason": "Complete document packets only need audit logging."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "mail.draft",
+        "mode": "approve",
+        "args": {
+          "intent": "request-missing-docs"
+        }
+      },
+      {
+        "capability": "calendar.create",
+        "mode": "approve",
+        "args": {
+          "title": "Client docs deadline"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 5,
+    "on_exceed": "escalate"
+  }
+}

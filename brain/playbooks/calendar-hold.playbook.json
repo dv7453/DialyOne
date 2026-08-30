@@ -1,0 +1,70 @@
+{
+  "id": "calendar-hold",
+  "title": "Calendar hold request",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "chat",
+      "eventType": "calendar.request"
+    }
+  ],
+  "context": [
+    {
+      "capability": "calendar.availability",
+      "args": {
+        "windowDays": 7
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.hasTimeWindow == true",
+        "class": "minor",
+        "reason": "A clear calendar ask can be prepared as an approval-gated hold."
+      },
+      {
+        "when": "signal.payload.conflict == true",
+        "class": "needs_human",
+        "reason": "Calendar conflicts need the user to choose."
+      },
+      {
+        "when": "signal.payload.cancelled == true",
+        "class": "ignore",
+        "reason": "Cancelled calendar asks should only be logged."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "calendar.create",
+        "mode": "approve",
+        "args": {
+          "status": "tentative"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 4,
+    "on_exceed": "escalate"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "id": "dispute-pack",
+  "title": "Dispute evidence pack",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.dispute"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.thread",
+      "args": {
+        "includeHistory": true
+      }
+    },
+    {
+      "capability": "mail.attachments",
+      "args": {
+        "metadataOnly": true
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.evidenceComplete == true",
+        "class": "minor",
+        "reason": "Complete dispute evidence can be packaged into a held draft."
+      },
+      {
+        "when": "signal.payload.amount >= 1000",
+        "class": "needs_human",
+        "reason": "High-value disputes need human review."
+      },
+      {
+        "when": "signal.payload.duplicate == true",
+        "class": "ignore",
+        "reason": "Duplicate dispute messages should only be logged."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "mail.draft",
+        "mode": "approve",
+        "args": {
+          "intent": "dispute-pack"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 5,
+    "on_exceed": "escalate"
+  }
+}

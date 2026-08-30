@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-reschedule",
+    "source": "gmail",
+    "type": "email.noshow",
+    "createdAt": "2026-08-30T08:15:00.000Z",
+    "payload": {
+      "firstMiss": true,
+      "repeatMisses": 0,
+      "rescheduled": false
+    }
+  },
+  "expect": {
+    "playbookId": "reschedule",
+    "triageClass": "minor",
+    "actionCapabilities": ["mail.draft", "calendar.create"]
+  }
+}

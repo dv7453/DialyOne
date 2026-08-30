@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-docs-intake",
+    "source": "gmail",
+    "type": "email.client_docs",
+    "createdAt": "2026-08-30T08:07:00.000Z",
+    "payload": {
+      "missingDocs": 2,
+      "deadlineDays": 5,
+      "complete": false
+    }
+  },
+  "expect": {
+    "playbookId": "docs-intake",
+    "triageClass": "minor",
+    "actionCapabilities": ["mail.draft", "calendar.create"]
+  }
+}

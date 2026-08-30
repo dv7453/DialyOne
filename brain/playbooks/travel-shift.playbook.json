@@ -1,0 +1,73 @@
+{
+  "id": "travel-shift",
+  "title": "Travel change watch",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.travel"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.thread",
+      "args": {
+        "category": "travel"
+      }
+    },
+    {
+      "capability": "calendar.today"
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.delayMinutes < 60",
+        "class": "minor",
+        "reason": "Small travel shifts can update a tentative calendar hold."
+      },
+      {
+        "when": "signal.payload.delayMinutes >= 60",
+        "class": "needs_human",
+        "reason": "Large travel shifts may require itinerary decisions."
+      },
+      {
+        "when": "signal.payload.informational == true",
+        "class": "ignore",
+        "reason": "Informational travel mail should only be logged."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "calendar.create",
+        "mode": "approve",
+        "args": {
+          "title": "Travel schedule adjustment"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 4,
+    "on_exceed": "escalate"
+  }
+}

@@ -1,0 +1,16 @@
+---
+description: Dialy living doc — read/update DIALY.md every stage
+globs:
+alwaysApply: true
+---
+
+# Dialy project trace
+
+For any Dialy / personal AI operator / brain / headless / Telegram / phase work in this repo:
+
+1. **Read** [`DIALY.md`](DIALY.md) (product/done), [`PLAN.md`](PLAN.md) (what we’ll do), [`STRATEGY.md`](STRATEGY.md) (why).
+2. Product name is **Dialy**. “Jarvis” was only an example of a personal AI operator — do not brand the product Jarvis.
+3. **Do not** drift into Rowboat BYOK UI polish, Electron polish, or dashboard rebuilds unless it blocks the current gate. Electron is test/reference only and will be deleted.
+4. Product = **operator presence** (unsupervised) with **webapp chat** for validation now; phone apps later. Mac/Telegram/Electron = lab wires only.
+5. After a gate completes or the user approves: **update `DIALY.md`**. Forward-plan / scenario changes → **`PLAN.md`**. Strategy “why” → **`STRATEGY.md`**.
+6. One phase at a time; give a manual test script; wait for approval before the next spike. Park merchant registry / Snap-number / Expo until G8-class proof.

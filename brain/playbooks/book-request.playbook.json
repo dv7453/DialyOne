@@ -1,0 +1,70 @@
+{
+  "id": "book-request",
+  "title": "Booking request",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "chat",
+      "eventType": "book.request"
+    }
+  ],
+  "context": [
+    {
+      "capability": "calendar.availability",
+      "args": {
+        "windowDays": 14
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.hasMerchant == true",
+        "class": "minor",
+        "reason": "A concrete booking ask can be held for calendar approval."
+      },
+      {
+        "when": "signal.payload.paymentRequired == true",
+        "class": "needs_human",
+        "reason": "Payment or deposit requirements need human approval."
+      },
+      {
+        "when": "signal.payload.cancelled == true",
+        "class": "ignore",
+        "reason": "Cancelled booking asks should only be logged."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "calendar.create",
+        "mode": "approve",
+        "args": {
+          "status": "tentative"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 4,
+    "on_exceed": "escalate"
+  }
+}

@@ -1,0 +1,77 @@
+import path from "path";
+import fs from "fs";
+import { homedir } from "os";
+
+function resolveWorkDir(): string {
+    const configured = process.env.DIALY_WORKDIR || process.env.ROWBOAT_WORKDIR;
+    if (!configured) {
+        const dialy = path.join(homedir(), ".dialy");
+        const legacy = path.join(homedir(), ".rowboat");
+        // Prefer Dialy home; keep reading legacy data dir if not yet migrated.
+        if (fs.existsSync(dialy)) return dialy;
+        if (fs.existsSync(legacy)) {
+            console.warn(
+                "[config] Using legacy ~/.rowboat — rename/move to ~/.dialy when convenient (DIALY_WORKDIR overrides).",
+            );
+            return legacy;
+        }
+        return dialy;
+    }
+
+    const expanded = configured === "~"
+        ? homedir()
+        : (configured.startsWith("~/") || configured.startsWith("~\\"))
+            ? path.join(homedir(), configured.slice(2))
+            : configured;
+
+    return path.resolve(expanded);
+}
+
+// Resolve app root relative to compiled file location (dist/...).
+// Override via DIALY_WORKDIR (ROWBOAT_WORKDIR still accepted).
+export const WorkDir = resolveWorkDir();
+
+function ensureDirs() {
+    const ensure = (p: string) => { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); };
+    ensure(WorkDir);
+    ensure(path.join(WorkDir, "agents"));
+    ensure(path.join(WorkDir, "config"));
+    ensure(path.join(WorkDir, "knowledge"));
+    ensure(path.join(WorkDir, "skills"));
+}
+
+function ensureDefaultConfigs() {
+    // Create note_creation.json with default strictness if it doesn't exist
+    const noteCreationConfig = path.join(WorkDir, "config", "note_creation.json");
+    if (!fs.existsSync(noteCreationConfig)) {
+        fs.writeFileSync(noteCreationConfig, JSON.stringify({
+            strictness: "medium",
+            configured: false
+        }, null, 2));
+    }
+
+    // Create gmail_sync.json with the default onboarding email count if it
+    // doesn't exist, so the "how many emails to backfill" setting is
+    // discoverable and editable. Keep the default in sync with
+    // DEFAULT_MAX_EMAILS in gmail_sync_config.ts.
+    const gmailSyncConfig = path.join(WorkDir, "config", "gmail_sync.json");
+    if (!fs.existsSync(gmailSyncConfig)) {
+        fs.writeFileSync(gmailSyncConfig, JSON.stringify({
+            maxEmails: 500
+        }, null, 2));
+    }
+}
+
+ensureDirs();
+ensureDefaultConfigs();
+
+// One-time deprecation for the old Today.md live dashboard. New installs no
+// longer get a generated Today.md; existing files are paused in place.
+import('../knowledge/deprecate_today_note.js').then(m => m.deprecateTodayNote()).catch(err => {
+    console.error('[TodayNoteDeprecation] Failed to deprecate Today.md:', err);
+});
+
+// Initialize version history repo (async, fire-and-forget on startup)
+import('../knowledge/version_history.js').then(m => m.initRepo()).catch(err => {
+    console.error('[VersionHistory] Failed to init repo:', err);
+});

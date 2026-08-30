@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-issue-triage",
+    "source": "github",
+    "type": "issue.opened",
+    "createdAt": "2026-08-30T08:17:00.000Z",
+    "payload": {
+      "goodFirstIssue": true,
+      "security": false,
+      "duplicate": false
+    }
+  },
+  "expect": {
+    "playbookId": "issue-triage",
+    "triageClass": "minor",
+    "actionCapabilities": ["code.draft_pr"]
+  }
+}

@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: dialy-brain
+    runtime: node
+    plan: starter
+    healthCheckPath: /health
+    buildCommand: cd apps/x && corepack enable && pnpm install --frozen-lockfile && npm run shared && pnpm --filter @x/core build
+    startCommand: cd brain && BRAIN_HOST=0.0.0.0 BRAIN_PORT=${PORT:-8787} node dist/host/main.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BRAIN_HOST
+        value: 0.0.0.0
+      - key: DIALY_WORKDIR
+        value: /opt/render/project/.dialy
+      - key: BRAIN_TOKEN
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: COMPOSIO_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_NOTIFY_CHAT_ID
+        sync: false

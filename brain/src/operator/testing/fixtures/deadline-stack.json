@@ -1,0 +1,17 @@
+{
+  "signal": {
+    "id": "sig-deadline-stack",
+    "source": "gmail",
+    "type": "email.advisor",
+    "createdAt": "2026-08-30T08:11:00.000Z",
+    "payload": {
+      "deadlineDays": 5,
+      "fyi": false
+    }
+  },
+  "expect": {
+    "playbookId": "deadline-stack",
+    "triageClass": "minor",
+    "actionCapabilities": ["journal.log"]
+  }
+}

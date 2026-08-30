@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-family-brief",
+    "source": "gmail",
+    "type": "email.school",
+    "createdAt": "2026-08-30T08:12:00.000Z",
+    "payload": {
+      "permissionSlip": false,
+      "eventDays": 3,
+      "newsletter": false
+    }
+  },
+  "expect": {
+    "playbookId": "family-brief",
+    "triageClass": "minor",
+    "actionCapabilities": ["calendar.create"]
+  }
+}

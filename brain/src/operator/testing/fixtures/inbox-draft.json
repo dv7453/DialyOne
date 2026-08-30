@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-inbox-draft",
+    "source": "gmail",
+    "type": "email.important",
+    "createdAt": "2026-08-30T08:02:00.000Z",
+    "payload": {
+      "fromInvestor": true,
+      "legal": false,
+      "newsletter": false
+    }
+  },
+  "expect": {
+    "playbookId": "inbox-draft",
+    "triageClass": "minor",
+    "actionCapabilities": ["mail.draft"]
+  }
+}

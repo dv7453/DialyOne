@@ -1,0 +1,78 @@
+{
+  "id": "weekly-digest",
+  "title": "Weekly operator digest",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "cron",
+      "eventType": "digest.weekly"
+    },
+    {
+      "type": "cron",
+      "expression": "0 17 * * 5"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.weekly_summary"
+    },
+    {
+      "capability": "deploy.weekly_summary"
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.blockers > 0",
+        "class": "needs_human",
+        "reason": "Weekly blockers should be escalated."
+      },
+      {
+        "when": "signal.payload.items > 0",
+        "class": "minor",
+        "reason": "Weekly activity can be summarized into the digest."
+      },
+      {
+        "when": "signal.payload.items == 0",
+        "class": "ignore",
+        "reason": "An empty weekly digest only needs logging."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "ignore"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "journal.log",
+        "mode": "auto",
+        "args": {
+          "summary": "weekly-digest"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "digest": {
+    "stack": ["minor"],
+    "deliver": "0 17 * * 5"
+  },
+  "budget": {
+    "max_model_calls": 1,
+    "max_tool_rounds": 4,
+    "on_exceed": "escalate"
+  }
+}

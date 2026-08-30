@@ -1,0 +1,81 @@
+{
+  "id": "morning-brief",
+  "title": "Morning decision brief",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "cron",
+      "eventType": "brief.morning"
+    },
+    {
+      "type": "cron",
+      "expression": "0 8 * * *"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.unread_important",
+      "args": {
+        "sinceHours": 24
+      }
+    },
+    {
+      "capability": "calendar.today"
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.decisions > 0",
+        "class": "needs_human",
+        "reason": "Morning briefs with decisions should wake the user."
+      },
+      {
+        "when": "signal.payload.items > 0",
+        "class": "minor",
+        "reason": "Non-urgent morning items can be summarized."
+      },
+      {
+        "when": "signal.payload.items == 0",
+        "class": "ignore",
+        "reason": "No morning items means only a journal entry is needed."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "ignore"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "journal.log",
+        "mode": "auto",
+        "args": {
+          "summary": "morning-brief"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "digest": {
+    "stack": ["minor"],
+    "deliver": "0 8 * * *"
+  },
+  "budget": {
+    "max_model_calls": 1,
+    "max_tool_rounds": 4,
+    "on_exceed": "escalate"
+  }
+}

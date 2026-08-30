@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-ci-triage",
+    "source": "github",
+    "type": "ci.failed",
+    "createdAt": "2026-08-30T08:01:00.000Z",
+    "payload": {
+      "flaky": true,
+      "security": false,
+      "resolved": false
+    }
+  },
+  "expect": {
+    "playbookId": "ci-triage",
+    "triageClass": "minor",
+    "actionCapabilities": ["code.draft_pr"]
+  }
+}

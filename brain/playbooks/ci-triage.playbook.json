@@ -1,0 +1,74 @@
+{
+  "id": "ci-triage",
+  "title": "CI triage",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "github",
+      "eventType": "ci.failed"
+    }
+  ],
+  "context": [
+    {
+      "capability": "code.ci_logs",
+      "args": {
+        "lines": 250
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.flaky == true",
+        "class": "minor",
+        "reason": "Known flaky checks can be summarized with a draft fix or rerun note."
+      },
+      {
+        "when": "signal.payload.security == true",
+        "class": "needs_human",
+        "reason": "Security-related CI failures need human review."
+      },
+      {
+        "when": "signal.payload.resolved == true",
+        "class": "ignore",
+        "reason": "Resolved CI failures should only be logged."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "code.draft_pr",
+        "mode": "approve",
+        "args": {
+          "intent": "fix-ci"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "digest": {
+    "stack": ["minor"],
+    "deliver": "0 8 * * 1-5"
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 5,
+    "on_exceed": "escalate"
+  }
+}

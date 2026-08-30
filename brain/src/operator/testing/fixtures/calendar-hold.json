@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-calendar-hold",
+    "source": "chat",
+    "type": "calendar.request",
+    "createdAt": "2026-08-30T08:04:00.000Z",
+    "payload": {
+      "hasTimeWindow": true,
+      "conflict": false,
+      "cancelled": false
+    }
+  },
+  "expect": {
+    "playbookId": "calendar-hold",
+    "triageClass": "minor",
+    "actionCapabilities": ["calendar.create"]
+  }
+}

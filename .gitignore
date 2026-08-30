@@ -1,0 +1,28 @@
+.DS_Store
+.env
+.env.*
+.vscode/
+data/
+.venv/
+.claude/
+
+# Dependencies & build
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+dist-api/
+*.tsbuildinfo
+.pnpm-store/
+
+# Local agent tooling (npx skills add) — never committed
+.agents/
+.claude/skills/
+skills-lock.json
+
+# Secrets / local runtime (never commit WorkDir copies)
+**/.rowboat/
+**/.dialy/
+**/credentials.json
+**/token.json
+**/client_secret*.json

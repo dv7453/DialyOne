@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-deploy-sentinel",
+    "source": "render",
+    "type": "webhook",
+    "createdAt": "2026-08-30T08:00:00.000Z",
+    "payload": {
+      "event": "deploy.failed",
+      "reason": "crashloop",
+      "attempt": 1
+    }
+  },
+  "expect": {
+    "playbookId": "deploy-sentinel",
+    "triageClass": "minor",
+    "actionCapabilities": ["deploy.restart", "code.draft_pr"]
+  }
+}

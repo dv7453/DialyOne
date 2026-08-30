@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-book-request",
+    "source": "chat",
+    "type": "book.request",
+    "createdAt": "2026-08-30T08:13:00.000Z",
+    "payload": {
+      "hasMerchant": true,
+      "paymentRequired": false,
+      "cancelled": false
+    }
+  },
+  "expect": {
+    "playbookId": "book-request",
+    "triageClass": "minor",
+    "actionCapabilities": ["calendar.create"]
+  }
+}

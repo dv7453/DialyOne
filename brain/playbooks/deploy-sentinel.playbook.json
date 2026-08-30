@@ -1,0 +1,82 @@
+{
+  "id": "deploy-sentinel",
+  "title": "Deploy sentinel",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "webhook",
+      "source": "render",
+      "match": {
+        "event": ["deploy.failed", "service.unhealthy"]
+      }
+    },
+    {
+      "type": "probe",
+      "every": "60s",
+      "capability": "deploy.health"
+    }
+  ],
+  "context": [
+    {
+      "capability": "deploy.logs",
+      "args": {
+        "lines": 200
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.reason == 'oom'",
+        "class": "needs_human",
+        "reason": "Out-of-memory deploy failures need a human before restart loops."
+      },
+      {
+        "when": "signal.payload.attempt < 2",
+        "class": "minor",
+        "reason": "First deploy failure can be prepared for a reviewed restart or fix draft."
+      },
+      {
+        "when": "signal.payload.resolved == true",
+        "class": "ignore",
+        "reason": "Resolved deploy events are logged without waking anyone."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "deploy.restart",
+        "mode": "approve"
+      },
+      {
+        "capability": "code.draft_pr",
+        "mode": "approve"
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "digest": {
+    "stack": ["minor"],
+    "deliver": "0 8 * * *"
+  },
+  "budget": {
+    "max_model_calls": 3,
+    "max_tool_rounds": 6,
+    "on_exceed": "escalate"
+  }
+}

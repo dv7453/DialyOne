@@ -1,0 +1,83 @@
+{
+  "id": "deal-intake",
+  "title": "Brand deal intake",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.brand_deal"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.thread",
+      "args": {
+        "includeHistory": true
+      }
+    },
+    {
+      "capability": "calendar.availability",
+      "args": {
+        "windowDays": 30
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.budget >= 500",
+        "class": "minor",
+        "reason": "Qualified brand deals should get a held reply draft."
+      },
+      {
+        "when": "signal.payload.exclusivity == true",
+        "class": "needs_human",
+        "reason": "Exclusivity terms need human review."
+      },
+      {
+        "when": "signal.payload.spam == true",
+        "class": "ignore",
+        "reason": "Spammy deal outreach should only be logged."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "mail.draft",
+        "mode": "approve",
+        "args": {
+          "intent": "brand-deal-reply"
+        }
+      },
+      {
+        "capability": "calendar.create",
+        "mode": "approve",
+        "args": {
+          "title": "Brand deal call"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 5,
+    "on_exceed": "escalate"
+  }
+}

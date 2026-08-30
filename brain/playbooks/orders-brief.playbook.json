@@ -1,0 +1,74 @@
+{
+  "id": "orders-brief",
+  "title": "Home baker orders brief",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.order"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.thread",
+      "args": {
+        "category": "orders"
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.orderCount > 0",
+        "class": "minor",
+        "reason": "New orders can be stacked into an operator brief."
+      },
+      {
+        "when": "signal.payload.dueToday == true",
+        "class": "needs_human",
+        "reason": "Orders due today should wake the baker."
+      },
+      {
+        "when": "signal.payload.orderCount == 0",
+        "class": "ignore",
+        "reason": "No order content to process."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "ignore"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "journal.log",
+        "mode": "auto",
+        "args": {
+          "summary": "orders-brief"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "digest": {
+    "stack": ["minor"],
+    "deliver": "0 11 * * *"
+  },
+  "budget": {
+    "max_model_calls": 1,
+    "max_tool_rounds": 3,
+    "on_exceed": "escalate"
+  }
+}

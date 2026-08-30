@@ -1,0 +1,317 @@
+name: Build Electron App
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write  # Required to upload release assets
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.15.0
+          cache: 'pnpm'
+          cache-dependency-path: 'apps/x/pnpm-lock.yaml'
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Extracted version: ${VERSION}"
+
+      - name: Update package.json versions
+        run: |
+          node -e "
+            const fs = require('fs');
+            const version = '${{ steps.version.outputs.version }}';
+
+            // Update apps/x/package.json
+            const rootPackage = JSON.parse(fs.readFileSync('apps/x/package.json', 'utf8'));
+            rootPackage.version = version;
+            fs.writeFileSync('apps/x/package.json', JSON.stringify(rootPackage, null, 2) + '\n');
+
+            // Update apps/x/apps/main/package.json
+            const mainPackage = JSON.parse(fs.readFileSync('apps/x/apps/main/package.json', 'utf8'));
+            mainPackage.version = version;
+            fs.writeFileSync('apps/x/apps/main/package.json', JSON.stringify(mainPackage, null, 2) + '\n');
+
+            console.log('Updated version to:', version);
+          "
+
+      - name: Import Code Signing Certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create a temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          # Create keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Decode and import certificate
+          echo "$APPLE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+
+          # Allow codesign to access the keychain
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Add keychain to search list
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
+
+          # Verify certificate was imported
+          security find-identity -v "$KEYCHAIN_PATH"
+
+          # Clean up certificate file
+          rm -f $RUNNER_TEMP/certificate.p12
+
+      - name: Build apps/harbor (link deps)
+        run: pnpm install --frozen-lockfile && pnpm -r build
+        working-directory: apps/harbor
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: apps/x
+
+      - name: Build electron app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
+          VITE_PUBLIC_POSTHOG_HOST: ${{ secrets.VITE_PUBLIC_POSTHOG_HOST }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-forge publish --arch=arm64,x64 --platform=darwin
+        working-directory: apps/x/apps/main
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: distributables
+          path: apps/x/apps/main/out/make/*
+          if-no-files-found: error
+          retention-days: 30
+
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.15.0
+          cache: 'pnpm'
+          cache-dependency-path: 'apps/x/pnpm-lock.yaml'
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Extracted version: ${VERSION}"
+
+      - name: Update package.json versions
+        run: |
+          node -e "
+            const fs = require('fs');
+            const version = '${{ steps.version.outputs.version }}';
+
+            // Update apps/x/package.json
+            const rootPackage = JSON.parse(fs.readFileSync('apps/x/package.json', 'utf8'));
+            rootPackage.version = version;
+            fs.writeFileSync('apps/x/package.json', JSON.stringify(rootPackage, null, 2) + '\n');
+
+            // Update apps/x/apps/main/package.json
+            const mainPackage = JSON.parse(fs.readFileSync('apps/x/apps/main/package.json', 'utf8'));
+            mainPackage.version = version;
+            fs.writeFileSync('apps/x/apps/main/package.json', JSON.stringify(mainPackage, null, 2) + '\n');
+
+            console.log('Updated version to:', version);
+          "
+
+      - name: Build apps/harbor (link deps)
+        run: pnpm install --frozen-lockfile && pnpm -r build
+        working-directory: apps/harbor
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: apps/x
+
+      - name: Build node-pty native binary for Linux
+        working-directory: apps/x
+        run: |
+          # node-pty ships prebuilt binaries only for darwin/win32; compile the
+          # linux-x64 binary so bundle.mjs can stage it into the package. Without
+          # this the Linux app crashes on launch (missing prebuilds/linux-x64/pty.node).
+          PTY="node_modules/.pnpm/node-pty@1.1.0/node_modules/node-pty"
+          cd "$PTY"
+          npx node-gyp rebuild
+          mkdir -p prebuilds/linux-x64
+          cp build/Release/pty.node prebuilds/linux-x64/
+
+      - name: Build electron app
+        env:
+          VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
+          VITE_PUBLIC_POSTHOG_HOST: ${{ secrets.VITE_PUBLIC_POSTHOG_HOST }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROWBOAT_SKIP_PACMAN: '1'  # Arch Linux package is built locally only, never in CI
+        run: npx electron-forge publish --arch=x64 --platform=linux
+        working-directory: apps/x/apps/main
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: distributables-linux
+          path: apps/x/apps/main/out/make/*
+          if-no-files-found: error
+          retention-days: 30
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.15.0
+          cache: 'pnpm'
+          cache-dependency-path: 'apps/x/pnpm-lock.yaml'
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Extracted version: ${VERSION}"
+
+      - name: Update package.json versions
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const version = '${{ steps.version.outputs.version }}';
+
+            // Update apps/x/package.json
+            const rootPackage = JSON.parse(fs.readFileSync('apps/x/package.json', 'utf8'));
+            rootPackage.version = version;
+            fs.writeFileSync('apps/x/package.json', JSON.stringify(rootPackage, null, 2) + '\n');
+
+            // Update apps/x/apps/main/package.json
+            const mainPackage = JSON.parse(fs.readFileSync('apps/x/apps/main/package.json', 'utf8'));
+            mainPackage.version = version;
+            fs.writeFileSync('apps/x/apps/main/package.json', JSON.stringify(mainPackage, null, 2) + '\n');
+
+            console.log('Updated version to:', version);
+          "
+
+      - name: Build apps/harbor (link deps)
+        run: pnpm install --frozen-lockfile && pnpm -r build
+        working-directory: apps/harbor
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: apps/x
+
+      - name: Setup Azure Trusted Signing
+        shell: pwsh
+        run: |
+          # Stage everything under a path WITHOUT spaces: @electron/windows-sign
+          # splits signWithParams on spaces, so the /dlib and /dmdf paths must be
+          # space-free.
+          $dir = "C:\azsign"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+
+          # The signtool plugin that delegates signing to Azure Trusted Signing
+          # (renamed "Artifact Signing" — the old Microsoft.Trusted.Signing.Client
+          # package is gone from NuGet, but the dlib inside kept its filename).
+          nuget install Microsoft.ArtifactSigning.Client -x -OutputDirectory "$dir\nuget"
+          $dlib = Get-ChildItem "$dir\nuget" -Recurse -Filter "Azure.CodeSigning.Dlib.dll" |
+            Where-Object { $_.FullName -match '\\x64\\' } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $dlib) { throw "x64 Azure.CodeSigning.Dlib.dll not found under $dir\nuget" }
+          echo "Using dlib: $dlib"
+
+          # Tells the dlib which account/profile to sign with.
+          @{
+            Endpoint               = "${{ secrets.AZURE_ENDPOINT }}"
+            CodeSigningAccountName = "${{ secrets.AZURE_CODE_SIGNING_NAME }}"
+            CertificateProfileName = "${{ secrets.AZURE_CERT_PROFILE_NAME }}"
+          } | ConvertTo-Json | Out-File "$dir\metadata.json" -Encoding utf8
+
+          # Newest Windows SDK signtool (the one vendored by @electron/windows-sign
+          # is too old to load the dlib). Copied into the space-free dir.
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Where-Object { $_.Directory.Parent.Name -match '^\d+(\.\d+)+$' } |
+            Sort-Object { [version]$_.Directory.Parent.Name } | Select-Object -Last 1
+          if (-not $signtool) { throw "signtool.exe not found in Windows SDK" }
+          Copy-Item $signtool.FullName "$dir\signtool.exe"
+          # NOTE: don't run signtool bare to "print usage" — it exits 1 and the
+          # Actions pwsh wrapper turns the last native exit code into a step
+          # failure. Read the version from file metadata instead.
+          echo "Using signtool $((Get-Item "$dir\signtool.exe").VersionInfo.ProductVersion) from $($signtool.FullName)"
+
+          echo "AZURE_CODE_SIGNING_DLIB=$dlib" >> $env:GITHUB_ENV
+          echo "AZURE_METADATA_JSON=$dir\metadata.json" >> $env:GITHUB_ENV
+          echo "SIGNTOOL_PATH=$dir\signtool.exe" >> $env:GITHUB_ENV
+
+      - name: Build electron app
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
+          VITE_PUBLIC_POSTHOG_HOST: ${{ secrets.VITE_PUBLIC_POSTHOG_HOST }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-forge publish --arch=x64 --platform=win32
+        working-directory: apps/x/apps/main
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: distributables-windows
+          path: apps/x/apps/main/out/make/*
+          if-no-files-found: error
+          retention-days: 30

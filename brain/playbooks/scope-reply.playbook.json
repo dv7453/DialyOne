@@ -1,0 +1,83 @@
+{
+  "id": "scope-reply",
+  "title": "Revision scope reply",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.revision"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.thread",
+      "args": {
+        "includeHistory": true
+      }
+    },
+    {
+      "capability": "calendar.availability",
+      "args": {
+        "windowDays": 14
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.withinScope == true",
+        "class": "minor",
+        "reason": "In-scope revisions can receive a held response draft."
+      },
+      {
+        "when": "signal.payload.extraCost > 0",
+        "class": "needs_human",
+        "reason": "Paid scope changes need the user to decide pricing."
+      },
+      {
+        "when": "signal.payload.closed == true",
+        "class": "ignore",
+        "reason": "Closed revision threads do not need action."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "mail.draft",
+        "mode": "approve",
+        "args": {
+          "intent": "revision-response"
+        }
+      },
+      {
+        "capability": "calendar.create",
+        "mode": "approve",
+        "args": {
+          "title": "Revision work block"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 5,
+    "on_exceed": "escalate"
+  }
+}

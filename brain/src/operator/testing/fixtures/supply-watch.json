@@ -1,0 +1,17 @@
+{
+  "signal": {
+    "id": "sig-supply-watch",
+    "source": "gmail",
+    "type": "email.supplier",
+    "createdAt": "2026-08-30T08:06:00.000Z",
+    "payload": {
+      "delayHours": 6,
+      "informational": false
+    }
+  },
+  "expect": {
+    "playbookId": "supply-watch",
+    "triageClass": "minor",
+    "actionCapabilities": ["journal.log"]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "signal": {
+    "id": "sig-weekly-digest",
+    "source": "cron",
+    "type": "digest.weekly",
+    "createdAt": "2026-08-30T08:09:00.000Z",
+    "payload": {
+      "items": 12,
+      "blockers": 0
+    }
+  },
+  "expect": {
+    "playbookId": "weekly-digest",
+    "triageClass": "minor",
+    "actionCapabilities": ["journal.log"]
+  }
+}

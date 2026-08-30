@@ -1,0 +1,74 @@
+{
+  "id": "inbox-draft",
+  "title": "Important inbox draft",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.important"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.thread",
+      "args": {
+        "includeHistory": true
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.fromInvestor == true",
+        "class": "minor",
+        "reason": "Investor messages should get a held reply draft."
+      },
+      {
+        "when": "signal.payload.legal == true",
+        "class": "needs_human",
+        "reason": "Legal language should be escalated before drafting."
+      },
+      {
+        "when": "signal.payload.newsletter == true",
+        "class": "ignore",
+        "reason": "Newsletters are not important operator work."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "mail.draft",
+        "mode": "approve",
+        "args": {
+          "tone": "concise"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "digest": {
+    "stack": ["minor"],
+    "deliver": "0 8 * * 1-5"
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 4,
+    "on_exceed": "escalate"
+  }
+}

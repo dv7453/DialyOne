@@ -1,0 +1,17 @@
+{
+  "signal": {
+    "id": "sig-travel-shift",
+    "source": "gmail",
+    "type": "email.travel",
+    "createdAt": "2026-08-30T08:18:00.000Z",
+    "payload": {
+      "delayMinutes": 30,
+      "informational": false
+    }
+  },
+  "expect": {
+    "playbookId": "travel-shift",
+    "triageClass": "minor",
+    "actionCapabilities": ["calendar.create"]
+  }
+}

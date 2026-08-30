@@ -1,0 +1,17 @@
+{
+  "signal": {
+    "id": "sig-orders-brief",
+    "source": "gmail",
+    "type": "email.order",
+    "createdAt": "2026-08-30T08:05:00.000Z",
+    "payload": {
+      "orderCount": 6,
+      "dueToday": false
+    }
+  },
+  "expect": {
+    "playbookId": "orders-brief",
+    "triageClass": "minor",
+    "actionCapabilities": ["journal.log"]
+  }
+}

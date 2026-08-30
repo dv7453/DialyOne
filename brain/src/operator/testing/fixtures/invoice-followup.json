@@ -1,0 +1,18 @@
+{
+  "signal": {
+    "id": "sig-invoice-followup",
+    "source": "gmail",
+    "type": "email.invoice_unpaid",
+    "createdAt": "2026-08-30T08:19:00.000Z",
+    "payload": {
+      "daysOverdue": 10,
+      "amount": 900,
+      "paid": false
+    }
+  },
+  "expect": {
+    "playbookId": "invoice-followup",
+    "triageClass": "minor",
+    "actionCapabilities": ["mail.draft"]
+  }
+}

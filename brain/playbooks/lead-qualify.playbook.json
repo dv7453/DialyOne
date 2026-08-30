@@ -1,0 +1,83 @@
+{
+  "id": "lead-qualify",
+  "title": "Real-estate lead qualify",
+  "enabled": true,
+  "triggers": [
+    {
+      "type": "event",
+      "source": "gmail",
+      "eventType": "email.lead"
+    }
+  ],
+  "context": [
+    {
+      "capability": "mail.thread",
+      "args": {
+        "includeHistory": true
+      }
+    },
+    {
+      "capability": "calendar.availability",
+      "args": {
+        "windowDays": 7
+      }
+    }
+  ],
+  "triage": {
+    "rules": [
+      {
+        "when": "signal.payload.qualified == true",
+        "class": "minor",
+        "reason": "Qualified leads should receive a held reply and viewing slot."
+      },
+      {
+        "when": "signal.payload.budgetKnown == false",
+        "class": "needs_human",
+        "reason": "Unknown budget needs human judgment before scheduling."
+      },
+      {
+        "when": "signal.payload.spam == true",
+        "class": "ignore",
+        "reason": "Spam leads should only be logged."
+      }
+    ],
+    "model": "triage",
+    "classes": ["minor", "needs_human", "ignore"],
+    "defaultClass": "needs_human"
+  },
+  "policy": {
+    "minor": [
+      {
+        "capability": "mail.draft",
+        "mode": "approve",
+        "args": {
+          "intent": "lead-reply"
+        }
+      },
+      {
+        "capability": "calendar.create",
+        "mode": "approve",
+        "args": {
+          "title": "Lead viewing"
+        }
+      }
+    ],
+    "needs_human": [
+      {
+        "capability": "notify.escalate",
+        "mode": "auto"
+      }
+    ],
+    "ignore": [
+      {
+        "capability": "journal.log",
+        "mode": "auto"
+      }
+    ]
+  },
+  "budget": {
+    "max_model_calls": 2,
+    "max_tool_rounds": 5,
+    "on_exceed": "escalate"
+  }
+}
