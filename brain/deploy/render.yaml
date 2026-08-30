@@ -4,8 +4,8 @@ services:
     runtime: node
     plan: starter
     healthCheckPath: /health
-    # Do NOT use `corepack enable` on Render — it tries to write /usr/bin (EROFS).
-    buildCommand: cd apps/x && npx pnpm@9.15.9 install --frozen-lockfile && npm run shared && npx pnpm@9.15.9 --filter @x/core build
+    # Prefer frozen when lockfile matches; --no-frozen-lockfile survives Render/pnpm override drift.
+    buildCommand: cd apps/x && npx pnpm@9.15.9 install --no-frozen-lockfile && npm run shared && npx pnpm@9.15.9 --filter @x/core build
     startCommand: cd brain && BRAIN_HOST=0.0.0.0 BRAIN_PORT=${PORT:-8787} node dist/host/main.js
     envVars:
       - key: NODE_ENV

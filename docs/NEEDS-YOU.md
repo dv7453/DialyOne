@@ -6,7 +6,7 @@ This is the short list of things only you can provide. The code is prepared to r
 
 - Render account access.
 - Create the service from `brain/deploy/render.yaml` or copy its build/start commands into a Render web service.
-  - **Build command:** `cd apps/x && npx pnpm@9.15.9 install --frozen-lockfile && npm run shared && npx pnpm@9.15.9 --filter @x/core build`
+  - **Build command:** `cd apps/x && npx pnpm@9.15.9 install --no-frozen-lockfile && npm run shared && npx pnpm@9.15.9 --filter @x/core build`
   - **Start command:** `cd brain && BRAIN_HOST=0.0.0.0 BRAIN_PORT=$PORT node dist/host/main.js`
   - Do **not** use `corepack enable` on Render (EROFS / read-only `/usr/bin`).
 - `RENDER_API_KEY` for the watchdog/provider checks.
