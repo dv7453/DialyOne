@@ -2,6 +2,7 @@ packages:
   - apps/*
   - packages/*
   - ../../brain
+  - ../harbor/packages/protocol
 
 allowBuilds:
   baileys: true

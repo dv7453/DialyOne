@@ -24,19 +24,13 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: |
-            apps/x/pnpm-lock.yaml
-            apps/harbor/pnpm-lock.yaml
-
-      # apps/x consumes @x/spaces-protocol (shared/core) and the stub
-      # Harbor (core tests) via link: dependencies into apps/harbor — install
-      # and build that workspace first or the shared build and core tests fail.
-      - name: Build apps/harbor (link deps)
-        run: pnpm install --frozen-lockfile && pnpm -r build
-        working-directory: apps/harbor
+          cache-dependency-path: apps/x/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build spaces-protocol
+        run: pnpm --filter @x/spaces-protocol build
 
       # Covers apps/main, apps/preload, and packages/*; apps/renderer is
       # excluded until its lint debt is paid down (see eslint.config.mts).
