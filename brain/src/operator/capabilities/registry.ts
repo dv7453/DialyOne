@@ -2,13 +2,19 @@ import type { CapabilityAdapter, CapabilityContext, CapabilityResult } from "./t
 
 export class CapabilityRegistry {
   private readonly adaptersByCapability = new Map<string, CapabilityAdapter>();
+  private readonly adapters: CapabilityAdapter[] = [];
 
   register(adapter: CapabilityAdapter): this {
+    this.adapters.push(adapter);
     for (const capability of adapter.capabilities) {
       this.adaptersByCapability.set(capability, adapter);
     }
 
     return this;
+  }
+
+  listAdapters(): CapabilityAdapter[] {
+    return [...this.adapters];
   }
 
   has(capability: string): boolean {

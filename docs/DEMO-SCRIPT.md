@@ -18,9 +18,10 @@ Show the operator routes:
 
 ```bash
 curl -s $BRAIN_URL/v1/operator/playbooks | jq .
+curl -s $BRAIN_URL/v1/operator/capabilities | jq .
 ```
 
-Explain that behavior comes from playbooks, not hardcoded scenario code.
+Explain that behavior comes from playbooks, not hardcoded scenario code. Capabilities flags show which adapters have env credentials (no secrets returned).
 
 Inject a controlled Render failure signal:
 

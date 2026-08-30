@@ -13,6 +13,7 @@ import { hostState } from "./state.js";
 import { hostLog } from "./logger.js";
 import {
     getOperatorApprovals,
+    getOperatorCapabilities,
     getOperatorPlaybookErrors,
     getOperatorPlaybooks,
     handleOperatorSignal,
@@ -26,6 +27,7 @@ const PLANNED = {
     "GET /v1/status": "boot, config presence, channels, model_idle (never secrets)",
     "POST /v1/operator/signal": "ingest Signal-like JSON into the operator engine",
     "GET /v1/operator/playbooks": "list loaded operator playbooks",
+    "GET /v1/operator/capabilities": "adapter availability flags (no secrets)",
     "GET /v1/operator/approvals": "list pending approval actions",
     "POST /v1/operator/approvals/resolve": "approve or deny a pending action",
     "POST /v1/chat": "not implemented — Spike B+",
@@ -152,47 +154,69 @@ export function createHostHttpServer(): http.Server {
             } catch {
                 channels = { error: "channels_unavailable" };
             }
-            json(res, 200, {
-                configDir: CONFIG_DIR,
-                bootOk: hostState.bootOk,
-                bootError: hostState.bootError ?? null,
-                uptimeSec: Math.floor((Date.now() - hostState.startedAt) / 1000),
-                model_idle: hostState.modelIdle,
-                lastWakeAt: hostState.lastWakeAt
-                    ? new Date(hostState.lastWakeAt).toISOString()
-                    : null,
-                lastIdleAt: hostState.lastIdleAt
-                    ? new Date(hostState.lastIdleAt).toISOString()
-                    : null,
-                lastInboundAt: hostState.lastInboundAt
-                    ? new Date(hostState.lastInboundAt).toISOString()
-                    : null,
-                lastInboundChannel: hostState.lastInboundChannel,
-                lastTurnId: hostState.lastTurnId,
-                lastModelCallAt: hostState.lastModelCallAt
-                    ? new Date(hostState.lastModelCallAt).toISOString()
-                    : null,
-                services: hostState.services,
-                http: hostState.http,
-                lanIpv4: listLanIPv4(),
-                channels,
-                operator: {
-                    playbooks: getOperatorPlaybooks().length,
-                    playbookErrors: getOperatorPlaybookErrors().length,
-                },
-                present: {
-                    models: configPresent("models.json"),
-                    composio: configPresent("composio.json"),
-                    channels: configPresent("channels.json"),
-                    elevenlabs: configPresent("elevenlabs.json"),
-                    deepgram: configPresent("deepgram.json"),
-                    exaSearch: configPresent("exa-search.json"),
-                },
-            });
+            void getOperatorCapabilities()
+                .then((caps) => {
+                    json(res, 200, {
+                        configDir: CONFIG_DIR,
+                        bootOk: hostState.bootOk,
+                        bootError: hostState.bootError ?? null,
+                        uptimeSec: Math.floor((Date.now() - hostState.startedAt) / 1000),
+                        model_idle: hostState.modelIdle,
+                        lastWakeAt: hostState.lastWakeAt
+                            ? new Date(hostState.lastWakeAt).toISOString()
+                            : null,
+                        lastIdleAt: hostState.lastIdleAt
+                            ? new Date(hostState.lastIdleAt).toISOString()
+                            : null,
+                        lastInboundAt: hostState.lastInboundAt
+                            ? new Date(hostState.lastInboundAt).toISOString()
+                            : null,
+                        lastInboundChannel: hostState.lastInboundChannel,
+                        lastTurnId: hostState.lastTurnId,
+                        lastModelCallAt: hostState.lastModelCallAt
+                            ? new Date(hostState.lastModelCallAt).toISOString()
+                            : null,
+                        services: hostState.services,
+                        http: hostState.http,
+                        lanIpv4: listLanIPv4(),
+                        channels,
+                        operator: {
+                            playbooks: getOperatorPlaybooks().length,
+                            playbookErrors: getOperatorPlaybookErrors().length,
+                        },
+                        operatorAdapters: caps.flags,
+                        present: {
+                            models: configPresent("models.json"),
+                            composio: configPresent("composio.json"),
+                            channels: configPresent("channels.json"),
+                            elevenlabs: configPresent("elevenlabs.json"),
+                            deepgram: configPresent("deepgram.json"),
+                            exaSearch: configPresent("exa-search.json"),
+                        },
+                    });
+                })
+                .catch((error) => {
+                    json(res, 500, {
+                        error: "status_failed",
+                        message: error instanceof Error ? error.message : String(error),
+                    });
+                });
             return;
         }
 
-        if (method === "GET" && url.pathname === "/v1/operator/playbooks") {
+        if (method === "GET" && pathname === "/v1/operator/capabilities") {
+            void getOperatorCapabilities()
+                .then((caps) => json(res, 200, caps))
+                .catch((error) => {
+                    json(res, 500, {
+                        error: "operator_capabilities_failed",
+                        message: error instanceof Error ? error.message : String(error),
+                    });
+                });
+            return;
+        }
+
+        if (method === "GET" && pathname === "/v1/operator/playbooks") {
             json(res, 200, {
                 playbooks: getOperatorPlaybooks(),
                 errors: getOperatorPlaybookErrors(),
@@ -200,7 +224,7 @@ export function createHostHttpServer(): http.Server {
             return;
         }
 
-        if (method === "GET" && url.pathname === "/v1/operator/approvals") {
+        if (method === "GET" && pathname === "/v1/operator/approvals") {
             void getOperatorApprovals()
                 .then((approvals) => json(res, 200, { approvals }))
                 .catch((error) => {
@@ -212,7 +236,7 @@ export function createHostHttpServer(): http.Server {
             return;
         }
 
-        if (method === "POST" && url.pathname === "/v1/operator/approvals/resolve") {
+        if (method === "POST" && pathname === "/v1/operator/approvals/resolve") {
             void readJsonBody(req)
                 .then(async (body) => {
                     const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
@@ -240,7 +264,7 @@ export function createHostHttpServer(): http.Server {
             return;
         }
 
-        if (method === "POST" && url.pathname === "/v1/operator/signal") {
+        if (method === "POST" && pathname === "/v1/operator/signal") {
             void readJsonBody(req)
                 .then((body) => handleOperatorSignal(body))
                 .then((result) => json(res, 200, result))
@@ -254,9 +278,9 @@ export function createHostHttpServer(): http.Server {
         }
 
         if (
-            url.pathname === "/v1/chat" ||
-            url.pathname === "/v1/graph" ||
-            url.pathname === "/v1/connections"
+            pathname === "/v1/chat" ||
+            pathname === "/v1/graph" ||
+            pathname === "/v1/connections"
         ) {
             json(res, 501, {
                 error: "not_implemented",

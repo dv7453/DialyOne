@@ -16,6 +16,7 @@ describe("CapabilityRegistry", () => {
     const registry = new CapabilityRegistry().register(adapter);
 
     expect(registry.has("deploy.health")).toBe(true);
+    expect(registry.listAdapters()).toEqual([adapter]);
     await expect(registry.listAvailable()).resolves.toEqual(["deploy.health"]);
     await expect(registry.execute("deploy.health", { service: "api" }, { signalId: "sig-1" })).resolves.toEqual({
       ok: true,

@@ -2,6 +2,8 @@
 
 This is the short list of things only you can provide. The code is prepared to run without these values; live capabilities stay dormant or alert through the fallback path until credentials exist.
 
+**Never paste secrets into chat or git.** Put them only in Render → dialyone → Environment, then redeploy.
+
 ## Hosting
 
 - [x] Render web service live: **https://dialyone.onrender.com**
@@ -9,29 +11,37 @@ This is the short list of things only you can provide. The code is prepared to r
   - **Build command:** `cd apps/x && npx pnpm@9.15.9 install --no-frozen-lockfile && npx pnpm@9.15.9 --filter @x/spaces-protocol build && npm run shared && npx pnpm@9.15.9 --filter @x/core build`
   - **Start command:** `cd brain && BRAIN_HOST=0.0.0.0 BRAIN_PORT=$PORT node dist/host/main.js`
   - Do **not** use `corepack enable` on Render (EROFS / read-only `/usr/bin`).
-- `RENDER_API_KEY` for the watchdog/provider checks.
-- `RENDER_SERVICE_ID` for the watchdog to inspect the deployed service.
-- Public `HEALTH_URL` = `https://dialyone.onrender.com/health` (set this in env where the watchdog runs).
+- [x] `RENDER_API_KEY` / `RENDER_SERVICE_ID` / `HEALTH_URL` set on the Render service env.
+- [x] Uptime monitor on `https://dialyone.onrender.com/health` (HEAD+GET both 200).
 - Optional `BRAIN_TOKEN` if the hosted HTTP routes should require `Authorization: Bearer <token>`.
 
-## GitHub
+## GitHub (Scene A draft PR)
 
-- `GITHUB_TOKEN` with access to the allowlisted repo.
-- `GITHUB_REPO` in `owner/name` form.
-- Confirm the repo Dialy may inspect and draft PRs against.
+1. GitHub → Settings → Developer settings → Personal access tokens.
+2. Classic: enable `repo`. Fine-grained: Contents + Pull requests on `dv7453/DialyOne`.
+3. On Render env set:
+   - `GITHUB_TOKEN` = the PAT
+   - `GITHUB_REPO` = `dv7453/DialyOne`
+4. Redeploy. Confirm: `curl -s https://dialyone.onrender.com/v1/operator/capabilities | jq .`
 
-## Composio / Gmail
+Smoke approve of `code.draft_pr` is **dry-run by default** (no real PR).
 
-- `COMPOSIO_API_KEY`.
-- Connect Gmail in Composio.
-- Confirm whether Dialy should use your real Gmail account or a demo account first.
-- Calendar is optional for this phase, but it will need Google Calendar access later.
+## Composio / Gmail (Scene B draft)
 
-## Notifications
+1. Composio dashboard → API key.
+2. Connect **Gmail** for your entity/user (use your real Gmail for this first pass).
+3. On Render env set: `COMPOSIO_API_KEY` = that key.
+4. Redeploy. `mail.draft` approve returns a draft payload (`sent: false`); live Composio send stays disabled.
 
-- `TELEGRAM_BOT_TOKEN`.
-- `TELEGRAM_NOTIFY_CHAT_ID`.
-- Optional `WATCHDOG_ALERT_FILE` if the watchdog should append alerts to a file instead of Telegram or console.
+## Notifications (Scene A oom escalate)
+
+1. BotFather → token for `@Dialy_thebot` (or a new bot).
+2. Message the bot from your account, then:
+   `curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq '.result[-1].message.chat.id'`
+3. On Render env set:
+   - `TELEGRAM_BOT_TOKEN`
+   - `TELEGRAM_NOTIFY_CHAT_ID`
+4. Redeploy. OOM deploy signals should DM you via Telegram.
 
 ## Already Done Without These
 

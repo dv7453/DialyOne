@@ -48,6 +48,7 @@ const workPlaybooksDir = path.join(WorkDir, "playbooks");
 const journal = new Journal(path.join(WorkDir, "logs", "operator.jsonl"));
 const approvals: ApprovalsStore = new InMemoryApprovalsStore();
 const registry = new CapabilityRegistry();
+const telegramNotify = new TelegramNotifySink();
 
 let nextActionId = 1;
 let booted = false;
@@ -84,7 +85,7 @@ function registerCapabilities(): void {
         .register(new GitHubCodeAdapter())
         .register(new MailAdapter())
         .register(new CalendarAdapter())
-        .register(new NotifyAdapter([new ConsoleNotifySink(), new TelegramNotifySink()]));
+        .register(new NotifyAdapter([new ConsoleNotifySink(), telegramNotify]));
 }
 
 function normalizeSignal(input: unknown): Signal {
@@ -141,6 +142,46 @@ export async function getOperatorApprovals() {
 
 export function getOperatorPlaybookErrors(): Array<{ file: string; message: string }> {
     return getPlaybookLoadErrors();
+}
+
+export type OperatorCapabilityStatus = {
+    id: string;
+    capabilities: string[];
+    available: boolean;
+};
+
+export type OperatorAdapterFlags = {
+    render: boolean;
+    github: boolean;
+    mail: boolean;
+    calendar: boolean;
+    notify: boolean;
+    telegram: boolean;
+};
+
+export async function getOperatorCapabilities(): Promise<{
+    adapters: OperatorCapabilityStatus[];
+    flags: OperatorAdapterFlags;
+}> {
+    if (!booted) bootOperator();
+    const adapters: OperatorCapabilityStatus[] = [];
+    for (const adapter of registry.listAdapters()) {
+        adapters.push({
+            id: adapter.id,
+            capabilities: [...adapter.capabilities],
+            available: await adapter.isAvailable(),
+        });
+    }
+    const byId = Object.fromEntries(adapters.map((a) => [a.id, a.available]));
+    const flags: OperatorAdapterFlags = {
+        render: Boolean(byId["deploy-render"]),
+        github: Boolean(byId["code-github"]),
+        mail: Boolean(byId["mail-composio"]),
+        calendar: Boolean(byId["calendar"]),
+        notify: Boolean(byId["notify"]),
+        telegram: await telegramNotify.isAvailable(),
+    };
+    return { adapters, flags };
 }
 
 export async function handleOperatorSignal(input: unknown): Promise<PublicEngineResult> {
