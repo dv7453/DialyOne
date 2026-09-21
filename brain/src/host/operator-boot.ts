@@ -1,12 +1,14 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { WorkDir } from "../config/config.js";
-import { InMemoryApprovalsStore, type ApprovalsStore } from "../operator/approvals.js";
+import { FileApprovalsStore, type ApprovalsStore } from "../operator/approvals.js";
 import { CalendarAdapter } from "../operator/capabilities/adapters/calendar.js";
 import { GitHubCodeAdapter } from "../operator/capabilities/adapters/code-github.js";
 import { RenderDeployAdapter } from "../operator/capabilities/adapters/deploy-render.js";
+import { JournalLogAdapter } from "../operator/capabilities/adapters/journal-log.js";
 import { MailAdapter } from "../operator/capabilities/adapters/mail-composio.js";
 import { ConsoleNotifySink, NotifyAdapter, TelegramNotifySink } from "../operator/capabilities/adapters/notify.js";
 import { CapabilityRegistry } from "../operator/capabilities/registry.js";
@@ -18,8 +20,18 @@ import {
     listPlaybooks,
     loadPlaybooksFromDir,
 } from "../operator/playbooks/loader.js";
+import { OperatorScheduler } from "../operator/scheduler.js";
 import { SignalSchema, type ActionRequest, type Signal } from "../operator/types.js";
 import { hostLog } from "./logger.js";
+import {
+    FailureStreaks,
+    WebhookDeduper,
+    normalizeGitHubEvent,
+    normalizeRenderEvent,
+    verifyGitHubSignature,
+    verifyRenderSignature,
+    type NormalizedWebhook,
+} from "./webhooks.js";
 
 type PublicAction = Pick<ActionRequest, "id" | "playbookId" | "capability" | "mode" | "signalId" | "status">;
 
@@ -46,12 +58,19 @@ const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const packagedPlaybooksDir = path.resolve(moduleDir, "../../playbooks");
 const workPlaybooksDir = path.join(WorkDir, "playbooks");
 const journal = new Journal(path.join(WorkDir, "logs", "operator.jsonl"));
-const approvals: ApprovalsStore = new InMemoryApprovalsStore();
+const approvals: ApprovalsStore = new FileApprovalsStore(path.join(WorkDir, "storage", "approvals.json"));
 const registry = new CapabilityRegistry();
 const telegramNotify = new TelegramNotifySink();
 
+const failureStreaks = new FailureStreaks();
+const webhookDeduper = new WebhookDeduper();
+
+// Action ids are namespaced per boot so persisted approvals from an earlier
+// process can never collide with ids minted after a restart.
+const bootId = randomUUID().slice(0, 8);
 let nextActionId = 1;
 let booted = false;
+let scheduler: OperatorScheduler | undefined;
 
 function isPlaybookFile(name: string): boolean {
     return [".json", ".yaml", ".yml"].includes(path.extname(name).toLowerCase());
@@ -85,6 +104,7 @@ function registerCapabilities(): void {
         .register(new GitHubCodeAdapter())
         .register(new MailAdapter())
         .register(new CalendarAdapter())
+        .register(new JournalLogAdapter(journal))
         .register(new NotifyAdapter([new ConsoleNotifySink(), telegramNotify]));
 }
 
@@ -126,6 +146,24 @@ export function bootOperator(): void {
         errors: getPlaybookLoadErrors().length,
     });
     booted = true;
+    startScheduler();
+}
+
+function startScheduler(): void {
+    if (scheduler || process.env.OPERATOR_SCHEDULER === "off") return;
+    scheduler = new OperatorScheduler({
+        listPlaybooks: () => listPlaybooks(),
+        emit: (signal) => handleOperatorSignal(signal),
+        runProbe: (capability, args) => registry.execute(capability, args, {}),
+        onError: (message, meta) => hostLog.warn(message, meta),
+    });
+    scheduler.start();
+    hostLog.info("operator scheduler started");
+}
+
+export function stopOperatorScheduler(): void {
+    scheduler?.stop();
+    scheduler = undefined;
 }
 
 export function getOperatorPlaybooks(): Array<{ id: string; title: string; enabled: boolean }> {
@@ -190,7 +228,7 @@ export async function handleOperatorSignal(input: unknown): Promise<PublicEngine
     const result = await processSignal(signal, listPlaybooks(), {
         journal,
         capabilities: registry,
-        createActionId: () => `operator-action-${nextActionId++}`,
+        createActionId: () => `operator-action-${bootId}-${nextActionId++}`,
     });
 
     const execution = await executeEngineResult(result, registry, approvals, journal);
@@ -209,6 +247,108 @@ export async function handleOperatorSignal(input: unknown): Promise<PublicEngine
         signalId: result.signalId,
         matches,
         execution,
+    };
+}
+
+export type WebhookVendor = "render" | "github";
+
+export type WebhookIngestResult = {
+    status: number;
+    body: Record<string, unknown>;
+};
+
+function headerValue(headers: Record<string, string | string[] | undefined>, name: string): string | undefined {
+    const raw = headers[name];
+    return Array.isArray(raw) ? raw[0] : raw;
+}
+
+/**
+ * Verifies, normalizes and queues an inbound vendor webhook.
+ *
+ * Vendors retry any response that is not 2xx within 15s, so the signal is
+ * processed after the response is returned rather than inline.
+ */
+export async function ingestOperatorWebhook(
+    vendor: WebhookVendor,
+    headers: Record<string, string | string[] | undefined>,
+    rawBody: string,
+): Promise<WebhookIngestResult> {
+    if (!booted) bootOperator();
+
+    const secret = vendor === "render" ? process.env.RENDER_WEBHOOK_SECRET : process.env.GITHUB_WEBHOOK_SECRET;
+    if (!secret) {
+        const envName = vendor === "render" ? "RENDER_WEBHOOK_SECRET" : "GITHUB_WEBHOOK_SECRET";
+        return { status: 503, body: { error: "webhook_not_configured", message: `${envName} is not set.` } };
+    }
+
+    const verification =
+        vendor === "render"
+            ? verifyRenderSignature({
+                  secret,
+                  id: headerValue(headers, "webhook-id"),
+                  timestamp: headerValue(headers, "webhook-timestamp"),
+                  signature: headerValue(headers, "webhook-signature"),
+                  rawBody,
+              })
+            : verifyGitHubSignature(secret, headerValue(headers, "x-hub-signature-256"), rawBody);
+
+    if (!verification.ok) {
+        hostLog.warn("operator webhook rejected", { vendor, reason: verification.reason });
+        return { status: 401, body: { error: "invalid_signature", message: verification.reason } };
+    }
+
+    let parsed: unknown;
+    try {
+        parsed = rawBody.trim() ? JSON.parse(rawBody) : {};
+    } catch (error) {
+        return {
+            status: 400,
+            body: { error: "invalid_json", message: error instanceof Error ? error.message : String(error) },
+        };
+    }
+
+    const normalized: NormalizedWebhook | null =
+        vendor === "render"
+            ? normalizeRenderEvent(parsed)
+            : normalizeGitHubEvent(headerValue(headers, "x-github-event"), parsed);
+
+    if (!normalized) {
+        return { status: 200, body: { ok: true, ignored: true, reason: "event is not operator-relevant" } };
+    }
+
+    const deliveryId =
+        normalized.dedupeKey ??
+        headerValue(headers, "webhook-id") ??
+        headerValue(headers, "x-github-delivery");
+    if (webhookDeduper.isDuplicate(deliveryId)) {
+        return { status: 200, body: { ok: true, duplicate: true, deliveryId } };
+    }
+
+    const subject =
+        vendor === "render"
+            ? (normalized.payload.serviceId as string | undefined)
+            : (normalized.payload.repo as string | undefined);
+    const attempt = failureStreaks.record(subject, normalized.failed);
+
+    const signal = {
+        id: `webhook-${vendor}-${deliveryId ?? Date.now()}`,
+        source: normalized.source,
+        type: normalized.type,
+        createdAt: new Date().toISOString(),
+        payload: { ...normalized.payload, attempt },
+    };
+
+    void handleOperatorSignal(signal).catch((error) => {
+        hostLog.error("operator webhook processing failed", {
+            vendor,
+            signalId: signal.id,
+            error: error instanceof Error ? error.message : String(error),
+        });
+    });
+
+    return {
+        status: 202,
+        body: { ok: true, accepted: true, signalId: signal.id, type: signal.type, attempt },
     };
 }
 
@@ -235,6 +375,7 @@ export async function resolveOperatorApproval(
 
         const result = await registry.execute(approval.capability, approval.args ?? {}, {
             signalId: approval.signalId,
+            playbookId: approval.playbookId,
         });
         await journal.append({
             ts: new Date().toISOString(),

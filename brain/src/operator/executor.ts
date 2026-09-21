@@ -81,7 +81,7 @@ async function executeAction(
         action,
         args: action.args ?? {},
       },
-      { signalId: action.signalId },
+      { signalId: action.signalId, playbookId: action.playbookId },
     );
     const status = result.ok ? "executed" : "failed";
     const record: ExecutionRecord = { ...baseRecord(action, status), result };
@@ -114,7 +114,10 @@ async function executeAction(
         }
       : (action.args ?? {});
 
-  const result = await registry.execute(action.capability, executeArgs, { signalId: action.signalId });
+  const result = await registry.execute(action.capability, executeArgs, {
+    signalId: action.signalId,
+    playbookId: action.playbookId,
+  });
   const status = result.ok ? "executed" : "failed";
   const record: ExecutionRecord = { ...baseRecord(action, status), result };
   await appendOutcome(journal, action, { status, result });

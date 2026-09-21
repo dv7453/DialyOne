@@ -4,6 +4,12 @@ services:
     runtime: node
     plan: starter
     healthCheckPath: /health
+    # Required, not optional: journal, approvals and sessions all live on disk.
+    # Without it Render's ephemeral filesystem erases them on every deploy.
+    disk:
+      name: dialy-data
+      mountPath: /opt/render/project/.dialy
+      sizeGB: 1
     # Prefer frozen when lockfile matches; --no-frozen-lockfile survives Render/pnpm override drift.
     buildCommand: cd apps/x && npx pnpm@9.15.9 install --no-frozen-lockfile && npx pnpm@9.15.9 --filter @x/spaces-protocol build && npm run shared && npx pnpm@9.15.9 --filter @x/core build
     startCommand: cd brain && BRAIN_HOST=0.0.0.0 BRAIN_PORT=${PORT:-8787} node dist/host/main.js
@@ -14,7 +20,14 @@ services:
         value: 0.0.0.0
       - key: DIALY_WORKDIR
         value: /opt/render/project/.dialy
+      # Cron expressions in playbooks are wall-clock for the user, not the box.
+      - key: DIALY_TZ
+        value: Asia/Kolkata
       - key: BRAIN_TOKEN
+        sync: false
+      - key: RENDER_WEBHOOK_SECRET
+        sync: false
+      - key: GITHUB_WEBHOOK_SECRET
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false

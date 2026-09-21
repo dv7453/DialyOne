@@ -8,6 +8,7 @@ export type CapabilityResult = {
 
 export type CapabilityContext = {
   signalId?: string;
+  playbookId?: string;
 };
 
 export interface CapabilityAdapter {

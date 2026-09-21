@@ -1,3 +1,4 @@
+import { CRON_SIGNAL_TYPE, PROBE_SIGNAL_TYPE, SCHEDULER_SOURCE } from "./scheduler.js";
 import type { Playbook, Signal, Trigger } from "./types.js";
 
 function readSignalPath(signal: Signal, path: string): unknown {
@@ -63,18 +64,51 @@ function matchesEventTrigger(signal: Signal, trigger: Extract<Trigger, { type: "
   return signal.type === trigger.eventType || payloadEventType === trigger.eventType;
 }
 
-function matchesTrigger(signal: Signal, trigger: Trigger): boolean {
+/**
+ * Scheduler-emitted signals name the playbook that asked for them, so a probe
+ * result is only ever triaged by the playbook that scheduled that probe.
+ */
+function matchesProbeTrigger(
+  signal: Signal,
+  trigger: Extract<Trigger, { type: "probe" }>,
+  playbook: Playbook,
+): boolean {
+  return (
+    signal.source === SCHEDULER_SOURCE &&
+    signal.type === PROBE_SIGNAL_TYPE &&
+    signal.payload.playbookId === playbook.id &&
+    signal.payload.capability === trigger.capability
+  );
+}
+
+function matchesCronTrigger(
+  signal: Signal,
+  trigger: Extract<Trigger, { type: "cron" }>,
+  playbook: Playbook,
+): boolean {
+  return (
+    signal.source === SCHEDULER_SOURCE &&
+    signal.type === CRON_SIGNAL_TYPE &&
+    signal.payload.playbookId === playbook.id &&
+    signal.payload.expression === trigger.expression
+  );
+}
+
+function matchesTrigger(signal: Signal, trigger: Trigger, playbook: Playbook): boolean {
   switch (trigger.type) {
     case "webhook":
       return matchesWebhookTrigger(signal, trigger);
     case "event":
       return matchesEventTrigger(signal, trigger);
     case "probe":
+      return matchesProbeTrigger(signal, trigger, playbook);
     case "cron":
-      return false;
+      return matchesCronTrigger(signal, trigger, playbook);
   }
 }
 
 export function matchPlaybooks(signal: Signal, playbooks: Playbook[]): Playbook[] {
-  return playbooks.filter((playbook) => playbook.enabled && playbook.triggers.some((trigger) => matchesTrigger(signal, trigger)));
+  return playbooks.filter(
+    (playbook) => playbook.enabled && playbook.triggers.some((trigger) => matchesTrigger(signal, trigger, playbook)),
+  );
 }

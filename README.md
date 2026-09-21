@@ -1,69 +1,39 @@
 # Dialy
 
-Personal AI operator — presence that acts, not a chatbot dashboard.
+A personal AI assistant I’m building as a side project.
 
-**Start here:** [`DIALY.md`](DIALY.md) (product + done) · [`PLAN.md`](PLAN.md) (what we’ll do) · [`STRATEGY.md`](STRATEGY.md) (why).  
-Architecture: [`BRAIN.md`](BRAIN.md). Brain runbook: [`brain/README.md`](brain/README.md).
+Chat in the browser, run a local agent with your own model keys, optionally poke at a desktop shell. Nothing fancy — just a hobby stack for talking to an always-on helper.
 
-1. **Operator loop** — wake on events, act, idle; escalate only when needed  
-2. **Multi-app efficiency** — one turn, many apps, without dumping hundreds of tool schemas  
-3. **Knowledge graph** — email/calendar/… → markdown with backlinks  
-4. **Voice later** — `brain/src/voice/voice.ts` (BYOK ElevenLabs + Deepgram)  
+## What’s in the repo
 
-Validation face now = **webapp** (not store apps yet). `apps/x` Electron is **test/reference only → delete later**.
+| Path | What it is |
+|------|------------|
+| `apps/web` | Browser chat UI |
+| `brain` | Agent runtime (headless HTTP host) |
+| `apps/x` | Electron app used for local experiments |
 
-## Layout
-
-```
-DIALY.md                 Product + gates + what is done
-PLAN.md                  Forward plan + persona scenarios
-STRATEGY.md              Why / moat / competitive thesis
-brain/                   Agent (package name @x/core)
-  src/                   Turn loop, Composio, knowledge engine, channels, voice
-  src/host/              Headless Dialy boot + HTTP
-  api/                   HTTP stub (prefer npm run start)
-apps/x/                  Electron — TEMP test/reference UI (delete later)
-  packages/shared/
-  apps/renderer/
-  apps/main/
-google-setup.md
-BRAIN.md
-```
-
-## Run (dev UI)
+## Web chat
 
 ```bash
-cd apps/x
-pnpm install
-npm run deps
+cd apps/web
+npm install
 npm run dev
 ```
 
-Then: **Settings → Models** (or edit `~/.dialy/config/models.json`) → **Settings → Connections** / **Mobile channels**.
+Opens on [http://localhost:5180](http://localhost:5180). Point it at a brain URL (local host or wherever you run `brain`).
 
-Headless:
+## Agent (headless)
 
 ```bash
-cd brain && npm run start
-# http://<mac-lan-ip>:8787/health
+cd apps/x && pnpm install && npm run deps
+cd ../../brain && npm run start
 ```
 
-Keys live on disk. Full **golden config checklist**: [`brain/README.md`](brain/README.md).
+Health check: `http://127.0.0.1:8787/health` (or your LAN IP if you bind `0.0.0.0`).
 
-| File | Purpose |
-|------|---------|
-| `~/.dialy/config/models.json` | LLM providers (v2) |
-| `~/.dialy/config/composio.json` | `{ "apiKey": "..." }` |
-| `~/.dialy/config/channels.json` | Telegram / WhatsApp bridges |
-| Google OAuth | follow `google-setup.md` |
-| `~/.dialy/config/elevenlabs.json` | TTS when you add voice |
-| `~/.dialy/config/deepgram.json` | STT when you add voice |
-| `~/.dialy/config/exa-search.json` | optional web search |
+Config lives on your machine, not in git — typically `~/.dialy/config/` (`models.json`, optional Composio / voice keys). See [`brain/README.md`](brain/README.md).
 
-## Hosted brain (Render)
+## Notes
 
-See [`brain/deploy/README.md`](brain/deploy/README.md) and [`docs/NEEDS-YOU.md`](docs/NEEDS-YOU.md).
-
-## Voice later
-
-Do **not** wire a cloud voice proxy. Use `brain/src/voice/voice.ts`. Ignore desktop call/PTT until the hardware mic/speaker path exists.
+- Bring your own API keys. Don’t commit `.env` or WorkDir files.
+- Electron is optional; the web UI is the easy way to try chat.

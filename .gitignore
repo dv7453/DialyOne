@@ -26,3 +26,23 @@ skills-lock.json
 **/credentials.json
 **/token.json
 **/client_secret*.json
+.pptx-venv/
+
+# Unpublished local notes
+.cursor/
+DIALY.md
+PLAN.md
+STRATEGY.md
+BRAIN.md
+CLAUDE.md
+APPUI.md
+ARCHPLAN.md
+google-setup.md
+market-report.md
+logo.png
+stitch prompt.md
+docs/
+docs/product/
+apps/web/stitch-ref/
+scripts/rebuild_pitch_deck.py
+*.pptx

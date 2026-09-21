@@ -17,20 +17,31 @@ import {
     getOperatorPlaybookErrors,
     getOperatorPlaybooks,
     handleOperatorSignal,
+    ingestOperatorWebhook,
     resolveOperatorApproval,
 } from "./operator-boot.js";
+import { answerHostAskHuman, runHostChat } from "./chat.js";
+import { synthesizeSpeech, transcribeAudio } from "../voice/voice.js";
 
 const CONFIG_DIR = path.join(WorkDir, "config");
+const MAX_JSON_BODY = 1024 * 1024;
+const MAX_VOICE_BODY = 32 * 1024 * 1024;
+const MAX_TTS_TEXT_CHARS = 5000;
 
 const PLANNED = {
     "GET /health": "liveness + uptime",
     "GET /v1/status": "boot, config presence, channels, model_idle (never secrets)",
     "POST /v1/operator/signal": "ingest Signal-like JSON into the operator engine",
+    "POST /v1/operator/webhook/render": "Render service events (HMAC-signed, no bearer token)",
+    "POST /v1/operator/webhook/github": "GitHub workflow/check events (HMAC-signed, no bearer token)",
     "GET /v1/operator/playbooks": "list loaded operator playbooks",
     "GET /v1/operator/capabilities": "adapter availability flags (no secrets)",
     "GET /v1/operator/approvals": "list pending approval actions",
     "POST /v1/operator/approvals/resolve": "approve or deny a pending action",
-    "POST /v1/chat": "not implemented — Spike B+",
+    "POST /v1/chat": "session chat (copilot) — settle on turn bus",
+    "POST /v1/chat/answer": "answer ask_human mid-turn",
+    "POST /v1/voice/transcribe": "Deepgram STT (audioBase64)",
+    "POST /v1/voice/speak": "ElevenLabs TTS (text → audioBase64)",
     "GET /v1/graph": "not implemented",
     "GET /v1/connections": "not implemented",
 } as const;
@@ -57,13 +68,13 @@ function json(res: http.ServerResponse, status: number, body: unknown, method = 
     res.end(payload);
 }
 
-function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
+function readJsonBody(req: http.IncomingMessage, maxBytes = MAX_JSON_BODY): Promise<unknown> {
     return new Promise((resolve, reject) => {
         let raw = "";
         req.setEncoding("utf8");
         req.on("data", (chunk) => {
             raw += chunk;
-            if (raw.length > 1024 * 1024) {
+            if (raw.length > maxBytes) {
                 reject(new Error("request body too large"));
                 req.destroy();
             }
@@ -82,6 +93,27 @@ function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
         req.on("error", reject);
     });
 }
+
+function readRawBody(req: http.IncomingMessage, maxBytes = MAX_JSON_BODY): Promise<string> {
+    return new Promise((resolve, reject) => {
+        let raw = "";
+        req.setEncoding("utf8");
+        req.on("data", (chunk) => {
+            raw += chunk;
+            if (raw.length > maxBytes) {
+                reject(new Error("request body too large"));
+                req.destroy();
+            }
+        });
+        req.on("end", () => resolve(raw));
+        req.on("error", reject);
+    });
+}
+
+const WEBHOOK_ROUTES: Record<string, "render" | "github"> = {
+    "/v1/operator/webhook/render": "render",
+    "/v1/operator/webhook/github": "github",
+};
 
 function authorized(req: http.IncomingMessage): boolean {
     const token = process.env.BRAIN_TOKEN;
@@ -121,12 +153,33 @@ export function createHostHttpServer(): http.Server {
             return;
         }
 
-        if (!authorized(req)) {
+        const pathname = url.pathname.replace(/\/+$/, "") || "/";
+        const webhookVendor = WEBHOOK_ROUTES[pathname];
+
+        // Webhook senders cannot present BRAIN_TOKEN; those routes authenticate
+        // by HMAC signature inside ingestOperatorWebhook instead.
+        if (!webhookVendor && !authorized(req)) {
             json(res, 401, { error: "unauthorized", hint: "set Authorization: Bearer $BRAIN_TOKEN" });
             return;
         }
 
-        const pathname = url.pathname.replace(/\/+$/, "") || "/";
+        if (webhookVendor) {
+            if (method !== "POST") {
+                json(res, 405, { error: "method_not_allowed", path: pathname });
+                return;
+            }
+
+            void readRawBody(req)
+                .then((rawBody) => ingestOperatorWebhook(webhookVendor, req.headers, rawBody))
+                .then((result) => json(res, result.status, result.body))
+                .catch((error) => {
+                    json(res, 400, {
+                        error: "invalid_webhook",
+                        message: error instanceof Error ? error.message : String(error),
+                    });
+                });
+            return;
+        }
 
         if ((method === "GET" || method === "HEAD") && (pathname === "/" || pathname === "/health")) {
             const uptimeSec = Math.floor((Date.now() - hostState.startedAt) / 1000);
@@ -185,13 +238,14 @@ export function createHostHttpServer(): http.Server {
                             playbookErrors: getOperatorPlaybookErrors().length,
                         },
                         operatorAdapters: caps.flags,
-                        present: {
+                            present: {
                             models: configPresent("models.json"),
                             composio: configPresent("composio.json"),
                             channels: configPresent("channels.json"),
                             elevenlabs: configPresent("elevenlabs.json"),
                             deepgram: configPresent("deepgram.json"),
                             exaSearch: configPresent("exa-search.json"),
+                            mcp: configPresent("mcp.json"),
                         },
                     });
                 })
@@ -277,15 +331,138 @@ export function createHostHttpServer(): http.Server {
             return;
         }
 
-        if (
-            pathname === "/v1/chat" ||
-            pathname === "/v1/graph" ||
-            pathname === "/v1/connections"
-        ) {
+        if (method === "POST" && pathname === "/v1/chat") {
+            void readJsonBody(req)
+                .then(async (body) => {
+                    const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+                    const message = typeof record.message === "string" ? record.message : "";
+                    const sessionId =
+                        typeof record.sessionId === "string" ? record.sessionId : undefined;
+                    const attachments = Array.isArray(record.attachments)
+                        ? (record.attachments as Array<Record<string, unknown>>).map((a) => ({
+                              name: typeof a.name === "string" ? a.name : undefined,
+                              mimeType: typeof a.mimeType === "string" ? a.mimeType : undefined,
+                              text: typeof a.text === "string" ? a.text : undefined,
+                              summary: typeof a.summary === "string" ? a.summary : undefined,
+                          }))
+                        : undefined;
+                    const result = await runHostChat({ sessionId, message, attachments });
+                    json(res, 200, result);
+                })
+                .catch((error) => {
+                    json(res, 400, {
+                        error: "chat_failed",
+                        message: error instanceof Error ? error.message : String(error),
+                    });
+                });
+            return;
+        }
+
+        if (method === "POST" && pathname === "/v1/chat/answer") {
+            void readJsonBody(req)
+                .then(async (body) => {
+                    const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+                    const sessionId = typeof record.sessionId === "string" ? record.sessionId : "";
+                    const turnId = typeof record.turnId === "string" ? record.turnId : "";
+                    const toolCallId = typeof record.toolCallId === "string" ? record.toolCallId : "";
+                    const text = typeof record.text === "string" ? record.text : "";
+                    if (!sessionId || !turnId || !toolCallId || !text.trim()) {
+                        json(res, 400, {
+                            error: "invalid_chat_answer",
+                            message: "Body must include sessionId, turnId, toolCallId, and text.",
+                        });
+                        return;
+                    }
+                    const result = await answerHostAskHuman({ sessionId, turnId, toolCallId, text });
+                    json(res, 200, result);
+                })
+                .catch((error) => {
+                    json(res, 400, {
+                        error: "chat_answer_failed",
+                        message: error instanceof Error ? error.message : String(error),
+                    });
+                });
+            return;
+        }
+
+        if (method === "POST" && pathname === "/v1/voice/transcribe") {
+            void readJsonBody(req, MAX_VOICE_BODY)
+                .then(async (body) => {
+                    const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+                    const audioBase64 = typeof record.audioBase64 === "string" ? record.audioBase64 : "";
+                    if (!audioBase64) {
+                        json(res, 400, {
+                            error: "bad_request",
+                            message: '"audioBase64" is required',
+                        });
+                        return;
+                    }
+                    const mimeType =
+                        typeof record.mimeType === "string" && record.mimeType
+                            ? record.mimeType
+                            : undefined;
+                    const audio = Buffer.from(audioBase64, "base64");
+                    if (audio.length === 0) {
+                        json(res, 400, {
+                            error: "bad_request",
+                            message: '"audioBase64" is not valid base64 audio',
+                        });
+                        return;
+                    }
+                    const { transcript } = await transcribeAudio(audio, { mimeType });
+                    json(res, 200, { transcript });
+                })
+                .catch((error) => {
+                    json(res, 503, {
+                        error: "voice_error",
+                        message: error instanceof Error ? error.message : String(error),
+                    });
+                });
+            return;
+        }
+
+        if (method === "POST" && pathname === "/v1/voice/speak") {
+            void readJsonBody(req)
+                .then(async (body) => {
+                    const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+                    const text = typeof record.text === "string" ? record.text.trim() : "";
+                    if (!text) {
+                        json(res, 400, {
+                            error: "bad_request",
+                            message: '"text" is required',
+                        });
+                        return;
+                    }
+                    if (text.length > MAX_TTS_TEXT_CHARS) {
+                        json(res, 400, {
+                            error: "too_large",
+                            message: `"text" exceeds ${MAX_TTS_TEXT_CHARS} chars`,
+                        });
+                        return;
+                    }
+                    const voiceId =
+                        typeof record.voiceId === "string" && record.voiceId
+                            ? record.voiceId
+                            : undefined;
+                    const { audioBase64, mimeType } = await synthesizeSpeech(text, {
+                        voiceId,
+                        modelId: "eleven_turbo_v2_5",
+                    });
+                    json(res, 200, { audioBase64, mimeType });
+                })
+                .catch((error) => {
+                    json(res, 503, {
+                        error: "voice_error",
+                        message: error instanceof Error ? error.message : String(error),
+                    });
+                });
+            return;
+        }
+
+        if (pathname === "/v1/graph" || pathname === "/v1/connections") {
             json(res, 501, {
                 error: "not_implemented",
                 route: `${method} ${url.pathname}`,
-                hint: "Spike B wires chat / channel wake; this host is health + idle services only.",
             });
             return;
         }
