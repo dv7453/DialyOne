@@ -7,10 +7,13 @@ import {
     type ModelMessage,
     type ToolSet,
 } from "ai";
+import type { LanguageModelV4 } from "@ai-sdk/provider";
 import type { z } from "zod";
 import type { LlmProvider } from "@x/shared/dist/models.js";
 import type { AssistantContentPart } from "@x/shared/dist/message.js";
 import type { JsonValue, ModelDescriptor, TurnUsage } from "@x/shared/dist/turns.js";
+import { getCurrentUserId } from "../../../auth/context.js";
+import { applySpendCap, runWithBudgetUser } from "../../../llm/index.js";
 import { convertFromMessages } from "../../assembly/message-encoding.js";
 import { resolveProviderConfig } from "../../../models/defaults.js";
 import { createProvider } from "../../../models/models.js";
@@ -88,10 +91,12 @@ export class RealModelRegistry implements IModelRegistry {
         const providerConfig = await this.resolveProvider(descriptor.provider);
         const provider = this.createProviderImpl(providerConfig);
         // Local settings (Ollama context window) are applied here.
-        const model = applyLocalModelSettings(
-            provider.languageModel(descriptor.model),
-            providerConfig,
-        );
+        const model = applySpendCap(
+            applyLocalModelSettings(
+                provider.languageModel(descriptor.model),
+                providerConfig,
+            ) as LanguageModelV4,
+        ) as LanguageModel;
         // Cache-only capability lookup (never blocks a turn on the network);
         // unknown support makes the effort mapping fail closed.
         const supportsReasoning = await this.reasoningSupport(
@@ -216,14 +221,17 @@ export class RealModelRegistry implements IModelRegistry {
             messages: request.messages,
         });
 
-        const result = this.invoke({
-            model,
-            ...(prompt.system === undefined ? {} : { system: prompt.system }),
-            messages: prompt.messages as ModelMessage[],
-            tools,
-            abortSignal: request.signal,
-            ...generationParams,
-        });
+        const invoke = () =>
+            this.invoke({
+                model,
+                ...(prompt.system === undefined ? {} : { system: prompt.system }),
+                messages: prompt.messages as ModelMessage[],
+                tools,
+                abortSignal: request.signal,
+                ...generationParams,
+            });
+        const userId = getCurrentUserId();
+        const result = userId ? runWithBudgetUser(userId, invoke) : invoke();
 
         for await (const raw of result.stream) {
             request.signal.throwIfAborted();

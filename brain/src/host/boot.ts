@@ -88,7 +88,16 @@ export async function bootDialyHost(): Promise<void> {
 
     startService("channels", () => initChannels());
     startService("channels-config-watcher", () => startChannelsConfigWatcher());
-    startService("operator", () => bootOperator());
+    try {
+        bootOperator();
+        hostState.services.push("operator");
+        hostLog.info("service started: operator");
+    } catch (error) {
+        hostState.bootOk = false;
+        hostState.bootError = error instanceof Error ? error.message : String(error);
+        hostLog.error("service operator threw on start", { error: hostState.bootError });
+        throw error;
+    }
     startService("live-note-scheduler", () => initLiveNoteScheduler());
     startService("bg-task-scheduler", () => initBackgroundTaskScheduler());
     startService("skills-watcher", () => startSkillsWatcher());

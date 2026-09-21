@@ -1,50 +1,92 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   answerAskHuman,
+  exchangeLoginToken,
   fetchApprovals,
+  fetchCapabilities,
   fetchHealth,
+  fetchMe,
+  logoutSession,
+  requestMagicLink,
   resolveApproval,
   sendChat,
   speakVoice,
   transcribeVoice,
 } from "./lib/brain";
 import {
+  isConnectorLive,
+  parseUnavailableConnection,
+  type NeededConnection,
+} from "./lib/connections";
+import { isBrainHttpError } from "./lib/errors";
+import { hasCompletedFirstRun, markFirstRunComplete } from "./lib/first-run";
+import { i18n, setAppLocale } from "./lib/i18n";
+import { pushAppPath, readAppLocation, replaceAppPath, type AppView } from "./lib/routing";
+import {
+  clearAuthSettings,
   isAuthed,
   loadSessionId,
   loadSettings,
   saveSessionId,
   saveSettings,
-  setAuthed,
   type WebSettings,
 } from "./lib/settings";
 import type {
+  AdapterFlags,
   ApprovalRecord,
   AskHumanState,
   ChatAttachment,
   ChatMessage,
+  MeUser,
   ResolvedApproval,
   VoicePhase,
 } from "./types";
 import { ApprovalCard } from "./components/ApprovalCard";
 import { Composer } from "./components/Composer";
+import { ConnectionCard } from "./components/ConnectionCard";
 import { EmptyState } from "./components/EmptyState";
 import { Header } from "./components/Header";
-import { LoginGate } from "./components/LoginGate";
+import { LoginGate, type LoginMode } from "./components/LoginGate";
 import { MessageList } from "./components/MessageList";
 import { ResolvedApprovalCard } from "./components/ResolvedApprovalCard";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { ShareSheet } from "./components/ShareSheet";
 import { VoiceBar } from "./components/VoiceBar";
+import { AccessPage } from "./components/AccessPage";
 
-function pendingBanner(n: number): string {
-  return n === 1 ? "One thing needs you." : `${n} things need you.`;
+const CallView = lazy(async () => {
+  const mod = await import("./components/CallView");
+  return { default: mod.CallView };
+});
+
+const PENDING_LOGIN_TOKEN = "dialy.web.pending-login-token";
+
+function CallFallback() {
+  const { t } = useTranslation();
+  return (
+    <div className="call-view">
+      <div className="empty-state">
+        <div className="empty-state__icon" aria-hidden>
+          <span className="voice-bar__pulse" />
+        </div>
+        <h1 className="empty-state__headline">{t("call.status.connecting")}</h1>
+      </div>
+    </div>
+  );
 }
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+const SHARE_INTENT = [
+  /\b(this|that)\s+(email|file|doc|pdf|attachment|message)\b/i,
+  /(ઈમેલ|ઇમેલ|મેઇલ|ફાઇલ|ફાઈલ|દસ્તાવેજ|જોડાણ|સંદેશ|મેસેજ)/,
+];
+
 function wantsShare(text: string): boolean {
-  return /\b(this|that)\s+(email|file|doc|pdf|attachment|message)\b/i.test(text);
+  return SHARE_INTENT.some((pattern) => pattern.test(text));
 }
 
 async function fileToAttachment(file: File): Promise<ChatAttachment> {
@@ -67,7 +109,9 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
   return {
     name: file.name,
     mimeType,
-    summary: `${Math.round(file.size / 1024)} KB — binary; Dialy got the filename only.`,
+    summary: i18n.t("chat.binaryAttachmentSummary", {
+      size: Math.round(file.size / 1024),
+    }),
   };
 }
 
@@ -84,13 +128,40 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+function takePendingLoginToken(): string | null {
+  const fromUrl = readAppLocation().loginToken;
+  if (fromUrl) {
+    sessionStorage.setItem(PENDING_LOGIN_TOKEN, fromUrl);
+    replaceAppPath("/");
+    return fromUrl;
+  }
+  return sessionStorage.getItem(PENDING_LOGIN_TOKEN);
+}
+
+function loginCopyKey(error: unknown): string {
+  if (error instanceof TypeError) return "login.brainUnreachable";
+  if (!isBrainHttpError(error)) return "login.sessionFailed";
+  if (error.status === 429 || error.code === "rate_limited") return "login.rateLimited";
+  if (error.code === "invalid_email") return "login.invalidEmail";
+  if (error.code === "auth_unavailable" || error.status === 503) return "login.authUnavailable";
+  if (error.status >= 500) return "login.brainUnreachable";
+  return "login.sessionFailed";
+}
+
 export default function App() {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState(loadSettings);
-  const [authed, setAuthedState] = useState(isAuthed);
+  const [authed, setAuthedState] = useState(() => isAuthed(loadSettings()));
+  const [me, setMe] = useState<MeUser | null>(null);
+  const [loginMode, setLoginMode] = useState<LoginMode>(() =>
+    readAppLocation().loginToken ? "exchanging" : "email",
+  );
+  const [loginEmail, setLoginEmail] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
   const [brainOk, setBrainOk] = useState(false);
+  const [flags, setFlags] = useState<AdapterFlags | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRecord[]>([]);
   const [resolved, setResolved] = useState<ResolvedApproval[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -104,11 +175,37 @@ export default function App() {
   const [shareOpen, setShareOpen] = useState(false);
   const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
   const [pendingAttach, setPendingAttach] = useState<ChatAttachment | null>(null);
+  const [callOpen, setCallOpen] = useState(false);
+  const [view, setView] = useState<AppView>(() => readAppLocation().view);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [neededConnection, setNeededConnection] = useState<NeededConnection | null>(null);
+  const [firstRun, setFirstRun] = useState(() => !hasCompletedFirstRun());
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const voiceActiveRef = useRef(false);
+  const mainScrollRef = useRef<HTMLElement | null>(null);
+
+  const persistSettings = useCallback((next: WebSettings) => {
+    saveSettings(next);
+    setSettings(next);
+  }, []);
+
+  const enterAuthed = useCallback(
+    (next: WebSettings, user: MeUser | null) => {
+      persistSettings(next);
+      setMe(user);
+      setAuthedState(true);
+      setLoginBusy(false);
+      setLoginError(null);
+      setLoginMode("email");
+      replaceAppPath("/");
+      setView("chat");
+      setFirstRun(!hasCompletedFirstRun());
+    },
+    [persistSettings],
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -117,35 +214,154 @@ export default function App() {
       const pending = await fetchApprovals(settings);
       setApprovals(pending);
       setError(null);
+      try {
+        const caps = await fetchCapabilities(settings);
+        setFlags(caps.flags);
+      } catch {
+        /* capabilities are optional for the chat surface */
+      }
     } catch (e) {
+      if (isBrainHttpError(e) && e.status === 401 && settings.authKind === "session") {
+        persistSettings(clearAuthSettings(settings));
+        setAuthedState(false);
+        setMe(null);
+        setLoginMode("email");
+        return;
+      }
       setBrainOk(false);
-      setError(e instanceof Error ? e.message : String(e));
+      setError(
+        e instanceof TypeError || (isBrainHttpError(e) && e.status >= 500)
+          ? t("login.brainUnreachable")
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
     }
-  }, [settings]);
+  }, [persistSettings, settings]);
 
   useEffect(() => {
     if (!authed) return;
     void refresh();
-    const t = setInterval(() => void refresh(), 12_000);
-    return () => clearInterval(t);
-  }, [authed, refresh]);
+    const interval = setInterval(() => void refresh(), callOpen ? 4_000 : 12_000);
+    return () => clearInterval(interval);
+  }, [authed, refresh, callOpen]);
 
-  async function handleLogin() {
+  useEffect(() => {
+    if (!authed) return;
+    let cancelled = false;
+    void fetchMe(settings)
+      .then((user) => {
+        if (!cancelled) setMe(user);
+      })
+      .catch(() => {
+        /* static-token lab sessions may have no /v1/me user */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authed, settings]);
+
+  useEffect(() => {
+    function onPop() {
+      setView(readAppLocation().view);
+    }
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  useEffect(() => {
+    const token = takePendingLoginToken();
+    if (!token) return;
+    sessionStorage.removeItem(PENDING_LOGIN_TOKEN);
+    setLoginMode("exchanging");
+    setLoginBusy(true);
+    const next: WebSettings = {
+      ...settings,
+      brainUrl: settings.brainUrl.replace(/\/+$/, ""),
+    };
+    void (async () => {
+      try {
+        const session = await exchangeLoginToken(next, token);
+        const authedSettings: WebSettings = {
+          ...next,
+          brainToken: session.token,
+          authKind: "session",
+        };
+        let user: MeUser | null = {
+          id: session.user.id,
+          email: session.user.email,
+          displayName: session.user.displayName,
+          locale: session.user.locale,
+          auth: "session",
+        };
+        try {
+          user = await fetchMe(authedSettings);
+        } catch {
+          /* session body is enough */
+        }
+        enterAuthed(authedSettings, user);
+      } catch (e) {
+        setLoginBusy(false);
+        if (isBrainHttpError(e) && (e.code === "invalid_token" || e.status === 401)) {
+          setLoginMode("invalid");
+          setLoginError(null);
+          return;
+        }
+        setLoginMode("email");
+        setLoginError(t(loginCopyKey(e)));
+      }
+    })();
+    // Login token is consumed once on first mount; settings are read from the
+    // closure on purpose so a later settings edit cannot retrigger exchange.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleSendLink() {
+    setLoginBusy(true);
+    setLoginError(null);
+    const email = loginEmail.trim();
+    if (!email || !email.includes("@")) {
+      setLoginError(t("login.invalidEmail"));
+      setLoginBusy(false);
+      return;
+    }
+    const next: WebSettings = {
+      ...settings,
+      brainUrl: settings.brainUrl.replace(/\/+$/, ""),
+    };
+    persistSettings(next);
+    try {
+      await requestMagicLink(next, email);
+      setLoginMode("sent");
+    } catch (e) {
+      setLoginError(t(loginCopyKey(e)));
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  async function handleLabLogin() {
     setLoginBusy(true);
     setLoginError(null);
     const next: WebSettings = {
+      ...settings,
       brainUrl: settings.brainUrl.replace(/\/+$/, ""),
-      brainToken: settings.brainToken,
+      authKind: "static",
     };
-    saveSettings(next);
-    setSettings(next);
+    persistSettings(next);
     try {
       const health = await fetchHealth(next);
-      if (!health.bootOk) throw new Error("Brain is not ready yet.");
-      setAuthed(true);
-      setAuthedState(true);
+      if (!health.bootOk) throw new Error(t("login.brainNotReady"));
+      let user: MeUser | null = null;
+      try {
+        user = await fetchMe(next);
+      } catch {
+        user = null;
+      }
       setBrainOk(true);
+      enterAuthed(next, user);
     } catch (e) {
+      persistSettings({ ...next, authKind: "none" });
       setLoginError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoginBusy(false);
@@ -154,8 +370,49 @@ export default function App() {
 
   function handleSignOut() {
     stopVoice(true);
-    setAuthed(false);
+    setCallOpen(false);
+    setSettingsOpen(false);
+    void logoutSession(settings).catch(() => undefined);
+    persistSettings(clearAuthSettings(settings));
     setAuthedState(false);
+    setMe(null);
+    setLoginMode("email");
+    replaceAppPath("/");
+    setView("chat");
+  }
+
+  function handleDeleted() {
+    handleSignOut();
+  }
+
+  function finishFirstRun() {
+    markFirstRunComplete();
+    setFirstRun(false);
+    mainScrollRef.current?.scrollTo({ top: 0 });
+  }
+
+  function handleFirstAction(id: "followUp" | "waiting") {
+    finishFirstRun();
+    if (id === "followUp") {
+      if (!isConnectorLive(flags, "mail")) {
+        setNeededConnection({ connector: "mail", capability: "mail.draft", source: "first_run" });
+        return;
+      }
+      void runChat({ text: t("firstRun.actionFollowUp") });
+      return;
+    }
+    void runChat({ text: t("firstRun.actionWaiting") });
+  }
+
+  function noteUnavailable(message: string) {
+    const parsed = parseUnavailableConnection(message);
+    if (parsed) {
+      setNeededConnection({
+        connector: parsed.connector,
+        capability: parsed.capability,
+        source: "action",
+      });
+    }
   }
 
   async function playTts(text: string) {
@@ -203,7 +460,7 @@ export default function App() {
     const userMsg: ChatMessage = {
       id: uid("u"),
       role: "user",
-      text: text || "(attachment)",
+      text: text || t("chat.attachmentFallback"),
       at: now,
       attachment: attachments?.[0],
     };
@@ -212,6 +469,7 @@ export default function App() {
     setPendingAttach(null);
     setChatBusy(true);
     setError(null);
+    finishFirstRun();
 
     if (attachments?.length) {
       setWaitingShare(false);
@@ -220,7 +478,7 @@ export default function App() {
         {
           id: uid("sys"),
           role: "system",
-          text: "Got it — what should I do?",
+          text: t("chat.gotAttachment"),
           at: new Date().toISOString(),
         },
       ]);
@@ -231,7 +489,7 @@ export default function App() {
         {
           id: uid("sys"),
           role: "system",
-          text: "Send it over — I’m ready.",
+          text: t("chat.sendItOver"),
           at: new Date().toISOString(),
         },
       ]);
@@ -241,11 +499,13 @@ export default function App() {
       if (opts.fromVoice) setVoicePhase("thinking");
       const result = await sendChat(settings, {
         sessionId,
-        message: text || "Please use the attached content.",
+        message: text || t("chat.useAttachedContent"),
         attachments,
       });
       setSessionId(result.sessionId);
       saveSessionId(result.sessionId);
+
+      if (result.error) noteUnavailable(result.error);
 
       if (result.status === "ask_human" && result.askHuman) {
         setAskHuman({
@@ -269,11 +529,18 @@ export default function App() {
         return;
       }
 
-      if (result.status !== "completed") {
-        throw new Error(result.error ?? `Chat ${result.status}`);
+      if (result.status === "suspended") {
+        await announceAwaitingApproval(opts.fromVoice);
+        return;
       }
 
-      const reply = result.text?.trim() || "(no reply)";
+      if (result.status !== "completed") {
+        const fail = result.error ?? `Chat ${result.status}`;
+        noteUnavailable(fail);
+        throw new Error(fail);
+      }
+
+      const reply = result.text?.trim() || t("chat.noReply");
       setMessages((prev) => [
         ...prev,
         { id: uid("d"), role: "dialy", text: reply, at: new Date().toISOString() },
@@ -281,12 +548,30 @@ export default function App() {
       if (opts.fromVoice) await playTts(reply);
       else setVoicePhase("idle");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      noteUnavailable(message);
+      setError(message);
       setVoicePhase("idle");
       voiceActiveRef.current = false;
     } finally {
       setChatBusy(false);
     }
+  }
+
+  /**
+   * A suspended turn is the approval flow working, not a failure: the brain has
+   * minted a card and is waiting. Pull the approvals list immediately so the card
+   * lands with the message instead of up to a poll interval later.
+   */
+  async function announceAwaitingApproval(fromVoice?: boolean) {
+    const notice = t("approvals.awaiting");
+    setMessages((prev) => [
+      ...prev,
+      { id: uid("d"), role: "dialy", text: notice, at: new Date().toISOString() },
+    ]);
+    await refresh();
+    if (fromVoice) await playTts(notice);
+    else setVoicePhase("idle");
   }
 
   async function answerPendingAsk(text: string) {
@@ -305,6 +590,7 @@ export default function App() {
         text: text.trim(),
       });
       setAskHuman(null);
+      if (result.error) noteUnavailable(result.error);
       if (result.status === "ask_human" && result.askHuman) {
         setAskHuman({
           sessionId: result.sessionId,
@@ -324,20 +610,28 @@ export default function App() {
         ]);
         return;
       }
+      if (result.status === "suspended") {
+        await announceAwaitingApproval(false);
+        return;
+      }
       if (result.status !== "completed") {
-        throw new Error(result.error ?? `Chat ${result.status}`);
+        const fail = result.error ?? `Chat ${result.status}`;
+        noteUnavailable(fail);
+        throw new Error(fail);
       }
       setMessages((prev) => [
         ...prev,
         {
           id: uid("d"),
           role: "dialy",
-          text: result.text?.trim() || "(no reply)",
+          text: result.text?.trim() || t("chat.noReply"),
           at: new Date().toISOString(),
         },
       ]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      noteUnavailable(message);
+      setError(message);
     } finally {
       setChatBusy(false);
     }
@@ -354,12 +648,14 @@ export default function App() {
         {
           id: uid("sys"),
           role: "system",
-          text: decision === "approve" ? "You approved an action." : "You denied an action.",
+          text: decision === "approve" ? t("approvals.youApproved") : t("approvals.youDenied"),
           at: new Date().toISOString(),
         },
       ]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      noteUnavailable(message);
+      setError(message);
     } finally {
       setBusyId(null);
     }
@@ -396,7 +692,7 @@ export default function App() {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
       recorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
+        stream.getTracks().forEach((track) => track.stop());
         void finishVoice(mime);
       };
       mediaRecorderRef.current = recorder;
@@ -404,7 +700,7 @@ export default function App() {
       setVoicePhase("listening");
       recorder.start();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Microphone unavailable");
+      setError(e instanceof Error ? e.message : t("voice.micUnavailable"));
       setVoicePhase("idle");
     }
   }
@@ -425,7 +721,7 @@ export default function App() {
       if (!text) {
         setVoicePhase("idle");
         voiceActiveRef.current = false;
-        setError("Didn’t catch that — try again.");
+        setError(t("voice.didntCatch"));
         return;
       }
       await runChat({ text, fromVoice: true });
@@ -443,8 +739,8 @@ export default function App() {
     if (waitingShare || messages.length > 0 || voicePhase !== "idle") {
       await runChat({
         text: waitingShare
-          ? "Here’s the attachment you asked for."
-          : `Please look at this: ${file.name}`,
+          ? t("chat.heresAttachment")
+          : t("chat.pleaseLookAt", { name: file.name }),
         attachments: [attachment],
       });
     } else {
@@ -453,7 +749,7 @@ export default function App() {
         {
           id: uid("sys"),
           role: "system",
-          text: `Attached ${file.name} — send a message when ready.`,
+          text: t("chat.attachedReady", { name: file.name }),
           at: new Date().toISOString(),
         },
       ]);
@@ -470,21 +766,56 @@ export default function App() {
     };
     setPendingAttach(attachment);
     await runChat({
-      text: waitingShare ? "Here’s what you asked for." : "Please use this pasted content.",
+      text: waitingShare ? t("chat.heresPasted") : t("chat.usePasted"),
       attachments: [attachment],
     });
+  }
+
+  function openAccess() {
+    pushAppPath("/access");
+    setView("access");
+  }
+
+  function closeAccess() {
+    replaceAppPath("/");
+    setView("chat");
   }
 
   if (!authed) {
     return (
       <LoginGate
+        mode={loginMode}
+        email={loginEmail}
         token={settings.brainToken}
         brainUrl={settings.brainUrl}
+        locale={settings.locale}
         error={loginError}
         busy={loginBusy}
+        onEmailChange={setLoginEmail}
         onTokenChange={(v) => setSettings((s) => ({ ...s, brainToken: v }))}
         onBrainUrlChange={(v) => setSettings((s) => ({ ...s, brainUrl: v }))}
-        onContinue={() => void handleLogin()}
+        onLocaleChange={(locale) => {
+          setAppLocale(locale);
+          setSettings((s) => ({ ...s, locale }));
+        }}
+        onSendLink={() => void handleSendLink()}
+        onLabContinue={() => void handleLabLogin()}
+        onUseDifferentEmail={() => {
+          setLoginMode("email");
+          setLoginError(null);
+        }}
+        onRequestNewLink={() => {
+          setLoginMode("email");
+          setLoginError(null);
+        }}
+        onShowLab={() => {
+          setLoginMode("lab");
+          setLoginError(null);
+        }}
+        onHideLab={() => {
+          setLoginMode("email");
+          setLoginError(null);
+        }}
       />
     );
   }
@@ -494,18 +825,77 @@ export default function App() {
     messages.length === 0 &&
     resolved.length === 0 &&
     !waitingShare &&
-    !pendingAttach;
+    !pendingAttach &&
+    !neededConnection;
   const voiceOpen = voicePhase !== "idle";
+
+  if (callOpen) {
+    return (
+      <Suspense fallback={<CallFallback />}>
+        <CallView
+          settings={settings}
+          sessionId={sessionId}
+          approvals={approvals}
+          resolved={resolved}
+          busyId={busyId}
+          onSettingsChange={(next) => {
+            persistSettings(next);
+          }}
+          onSession={(id) => {
+            setSessionId(id);
+            saveSessionId(id);
+          }}
+          onResolve={(approval, decision) => void handleResolve(approval, decision)}
+          onClose={() => setCallOpen(false)}
+        />
+      </Suspense>
+    );
+  }
+
+  if (view === "access") {
+    return (
+      <>
+        <AccessPage settings={settings} me={me} onClose={closeAccess} />
+        {settingsOpen ? (
+          <SettingsPanel
+            settings={settings}
+            me={me}
+            onSave={persistSettings}
+            onClose={() => setSettingsOpen(false)}
+            onSignOut={handleSignOut}
+            onDeleted={handleDeleted}
+          />
+        ) : null}
+      </>
+    );
+  }
 
   return (
     <div className="app-shell">
-      <Header brainOk={brainOk} onSignOut={handleSignOut} />
-      <main className="main-scroll">
+      <Header
+        brainOk={brainOk}
+        onCall={() => setCallOpen(true)}
+        onAccess={openAccess}
+        onSettings={() => setSettingsOpen(true)}
+      />
+      <main className="main-scroll" ref={mainScrollRef}>
         {error ? <div className="error-banner">{error}</div> : null}
-        {showEmpty ? <EmptyState /> : null}
+        {showEmpty ? (
+          <EmptyState
+            firstRun={firstRun}
+            onCall={() => setCallOpen(true)}
+            onFirstAction={handleFirstAction}
+            onSkipFirstRun={finishFirstRun}
+          />
+        ) : null}
+        {neededConnection ? (
+          <ConnectionCard needed={neededConnection} onDismiss={() => setNeededConnection(null)} />
+        ) : null}
         {approvals.length > 0 ? (
           <>
-            <p className="pending-banner">{pendingBanner(approvals.length)}</p>
+            <p className="pending-banner">
+              {t("approvals.pendingBanner", { count: approvals.length })}
+            </p>
             {approvals.map((a) => (
               <ApprovalCard
                 key={a.id}
@@ -522,7 +912,7 @@ export default function App() {
         {waitingShare ? (
           <div className="msg--system">
             <span className="material-symbols-outlined">mark_email_unread</span>
-            Still waiting for that email.
+            {t("chat.waitingShare")}
           </div>
         ) : null}
         {pendingAttach && !chatBusy ? (
@@ -530,7 +920,7 @@ export default function App() {
             <span className="material-symbols-outlined">draft</span>
             <div>
               <p className="attachment-card__name">{pendingAttach.name}</p>
-              <p className="attachment-card__summary">Ready to send with your next message.</p>
+              <p className="attachment-card__summary">{t("chat.readyToSend")}</p>
             </div>
           </div>
         ) : null}
@@ -538,7 +928,7 @@ export default function App() {
         {chatBusy && !voiceOpen ? (
           <div className="msg--system">
             <span className="material-symbols-outlined">hourglass_empty</span>
-            Dialy is thinking…
+            {t("chat.thinking")}
           </div>
         ) : null}
       </main>
@@ -550,7 +940,7 @@ export default function App() {
             else stopVoice(true);
           }}
         />
-      ) : (
+      ) : firstRun && showEmpty ? null : (
         <Composer
           value={draft}
           onChange={setDraft}
@@ -565,8 +955,18 @@ export default function App() {
         open={shareOpen}
         onClose={() => setShareOpen(false)}
         onPickFile={(f) => void handlePickFile(f)}
-        onPasteText={(t) => void handlePasteText(t)}
+        onPasteText={(pasted) => void handlePasteText(pasted)}
       />
+      {settingsOpen ? (
+        <SettingsPanel
+          settings={settings}
+          me={me}
+          onSave={persistSettings}
+          onClose={() => setSettingsOpen(false)}
+          onSignOut={handleSignOut}
+          onDeleted={handleDeleted}
+        />
+      ) : null}
     </div>
   );
 }

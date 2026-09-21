@@ -116,7 +116,21 @@ export const ActionRequestSchema = z.object({
 
 export const JournalEntrySchema = z.object({
   ts: z.string().min(1),
-  kind: z.enum(["signal", "decision", "action", "outcome", "escalate"]),
+  kind: z.enum([
+    "signal",
+    "decision",
+    "action",
+    "outcome",
+    "escalate",
+    "retry_scheduled",
+    "dead_letter",
+    "autonomy_used",
+    "promotion_available",
+    "autonomy_granted",
+    "autonomy_revoked",
+    "streak_reset",
+    "expired",
+  ]),
   playbookId: z.string().min(1).optional(),
   signalId: z.string().min(1).optional(),
   data: UnknownRecordSchema,

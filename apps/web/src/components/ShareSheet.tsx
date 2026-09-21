@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -6,6 +8,7 @@ type Props = {
 };
 
 export function ShareSheet({ open, onClose, onPickFile, onPasteText }: Props) {
+  const { t } = useTranslation();
   if (!open) return null;
 
   return (
@@ -16,15 +19,15 @@ export function ShareSheet({ open, onClose, onPickFile, onPasteText }: Props) {
       >
         <div className="settings-handle" />
         <div className="settings-panel__header">
-          <h2 className="settings-panel__title">Share into Dialy</h2>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
+          <h2 className="settings-panel__title">{t("share.title")}</h2>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={t("common.close")}>
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
         <div className="settings-panel__body">
           <label className="share-pick">
             <span className="material-symbols-outlined">attach_file</span>
-            <span>Choose file (email, PDF, image, text)</span>
+            <span>{t("share.chooseFile")}</span>
             <input
               type="file"
               accept=".eml,.txt,.md,.pdf,image/*,text/*,.json"
@@ -42,15 +45,15 @@ export function ShareSheet({ open, onClose, onPickFile, onPasteText }: Props) {
                 const text = await navigator.clipboard.readText();
                 if (text.trim()) onPasteText(text.trim());
               } catch {
-                const pasted = window.prompt("Paste text to share with Dialy");
+                const pasted = window.prompt(t("share.pastePrompt"));
                 if (pasted?.trim()) onPasteText(pasted.trim());
               }
             }}
           >
             <span className="material-symbols-outlined">content_paste</span>
-            <span>Paste from clipboard</span>
+            <span>{t("share.pasteClipboard")}</span>
           </button>
-          <p className="field__hint">Attachment joins the same chat session.</p>
+          <p className="field__hint">{t("share.hint")}</p>
         </div>
       </div>
     </div>

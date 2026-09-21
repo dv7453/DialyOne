@@ -10,8 +10,12 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit"
   },
   "dependencies": {
+    "@livekit/components-react": "^2.9.24",
+    "i18next": "^26.4.2",
+    "livekit-client": "^2.22.3",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "react-i18next": "^17.0.14"
   },
   "devDependencies": {
     "@types/react": "^19.2.7",

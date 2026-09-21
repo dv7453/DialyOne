@@ -1,26 +1,40 @@
 import { useEffect, useState } from "react";
-import type { AdapterFlags } from "../types";
+import { useTranslation } from "react-i18next";
+import type { AdapterFlags, MeUser } from "../types";
+import { deleteAccount, exportAccount, fetchCapabilities } from "../lib/brain";
+import { isNotImplemented } from "../lib/errors";
 import type { WebSettings } from "../lib/settings";
-import { fetchCapabilities } from "../lib/brain";
+import { LocaleToggle } from "./LocaleToggle";
 
 type Props = {
   settings: WebSettings;
+  me: MeUser | null;
   onSave: (s: WebSettings) => void;
   onClose: () => void;
+  onSignOut: () => void;
+  onDeleted: () => void;
 };
 
-const CONNECTOR_META: { key: keyof AdapterFlags; label: string; icon: string }[] = [
-  { key: "render", label: "Render", icon: "cloud" },
-  { key: "github", label: "GitHub", icon: "code" },
-  { key: "mail", label: "Gmail", icon: "mail" },
-  { key: "telegram", label: "Telegram", icon: "send" },
-  { key: "calendar", label: "Calendar", icon: "calendar_today" },
+const CONNECTOR_META: {
+  key: "render" | "github" | "mail" | "telegram" | "calendar";
+  icon: string;
+}[] = [
+  { key: "render", icon: "cloud" },
+  { key: "github", icon: "code" },
+  { key: "mail", icon: "mail" },
+  { key: "telegram", icon: "send" },
+  { key: "calendar", icon: "calendar_today" },
 ];
 
-export function SettingsPanel({ settings, onSave, onClose }: Props) {
+export function SettingsPanel({ settings, me, onSave, onClose, onSignOut, onDeleted }: Props) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(settings);
   const [flags, setFlags] = useState<AdapterFlags | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTyped, setDeleteTyped] = useState("");
 
   useEffect(() => {
     void fetchCapabilities(draft)
@@ -31,21 +45,62 @@ export function SettingsPanel({ settings, onSave, onClose }: Props) {
       .catch((e: Error) => setErr(e.message));
   }, [draft.brainUrl, draft.brainToken]);
 
+  async function handleExport() {
+    setExporting(true);
+    setErr(null);
+    try {
+      const data = await exportAccount(draft);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dialy-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr(isNotImplemented(e) ? t("settings.exportUnavailable") : t("settings.exportFailed"));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleDelete() {
+    const email = me?.email?.trim().toLowerCase() ?? "";
+    if (!email) {
+      setErr(t("settings.deleteNeedEmail"));
+      return;
+    }
+    if (deleteTyped.trim().toLowerCase() !== email) {
+      setErr(t("settings.deleteMismatch"));
+      return;
+    }
+    setDeleting(true);
+    setErr(null);
+    try {
+      await deleteAccount(draft);
+      onDeleted();
+    } catch (e) {
+      setErr(isNotImplemented(e) ? t("settings.deleteUnavailable") : t("settings.deleteFailed"));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="settings-overlay" onClick={onClose} role="presentation">
       <div
         className="settings-panel"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label="Settings"
+        aria-label={t("settings.title")}
       >
         <div className="settings-handle" aria-hidden />
         <div className="settings-panel__header">
           <h1 className="settings-panel__title">
             <img src="/brand/dialy-mark.png" alt="" className="header__mark" />
-            Settings
+            {t("settings.title")}
           </h1>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={t("common.close")}>
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
@@ -54,23 +109,87 @@ export function SettingsPanel({ settings, onSave, onClose }: Props) {
           {err ? <div className="error-banner">{err}</div> : null}
 
           <section>
-            <h2 className="settings-section__label">Brain configuration</h2>
+            <h2 className="settings-section__label">{t("settings.language")}</h2>
+            <LocaleToggle
+              value={draft.locale}
+              align="start"
+              onChange={(locale) => setDraft((current) => ({ ...current, locale }))}
+            />
+          </section>
+
+          <section>
+            <h2 className="settings-section__label">{t("settings.account")}</h2>
+            <button
+              type="button"
+              className="btn btn-ghost settings-account__btn"
+              disabled={exporting}
+              onClick={() => void handleExport()}
+            >
+              {exporting ? t("settings.exporting") : t("settings.export")}
+            </button>
+            <p className="field__hint">{t("settings.exportHint")}</p>
+            {!deleteOpen ? (
+              <button
+                type="button"
+                className="btn btn-ghost settings-account__btn settings-account__danger"
+                onClick={() => {
+                  setDeleteOpen(true);
+                  setErr(null);
+                }}
+              >
+                {t("settings.delete")}
+              </button>
+            ) : (
+              <div className="settings-delete">
+                <p className="settings-delete__warn">{t("settings.deleteWarn")}</p>
+                {me?.email ? (
+                  <>
+                    <label className="login-field">
+                      <span>{t("settings.deleteConfirmLabel")}</span>
+                      <input
+                        type="email"
+                        autoComplete="off"
+                        value={deleteTyped}
+                        onChange={(e) => setDeleteTyped(e.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="btn btn-solid settings-account__btn"
+                      disabled={deleting || !deleteTyped.trim()}
+                      onClick={() => void handleDelete()}
+                    >
+                      {deleting ? t("settings.deleting") : t("settings.deleteConfirmCta")}
+                    </button>
+                  </>
+                ) : (
+                  <p className="field__hint">{t("settings.deleteNeedEmail")}</p>
+                )}
+              </div>
+            )}
+            <button type="button" className="btn btn-ghost settings-account__btn" onClick={onSignOut}>
+              {t("settings.signOut")}
+            </button>
+          </section>
+
+          <section>
+            <h2 className="settings-section__label">{t("settings.brainSection")}</h2>
             <div className="field">
               <label htmlFor="brain-url">
                 <span className="material-symbols-outlined">api</span>
-                Endpoint URL
+                {t("settings.endpointUrl")}
               </label>
               <input
                 id="brain-url"
                 value={draft.brainUrl}
                 onChange={(e) => setDraft({ ...draft, brainUrl: e.target.value })}
               />
-              <p className="field__hint">Primary endpoint for AI logic execution.</p>
+              <p className="field__hint">{t("settings.endpointHint")}</p>
             </div>
             <div className="field">
               <label htmlFor="brain-token">
                 <span className="material-symbols-outlined">key</span>
-                Brain token (optional)
+                {t("settings.brainToken")}
               </label>
               <input
                 id="brain-token"
@@ -84,23 +203,23 @@ export function SettingsPanel({ settings, onSave, onClose }: Props) {
 
           <section>
             <h2 className="settings-section__label">
-              Live connectors
-              <span className="settings-badge">Status</span>
+              {t("settings.connectorsSection")}
+              <span className="settings-badge">{t("settings.statusBadge")}</span>
             </h2>
             <div className="live-list">
-              {CONNECTOR_META.map(({ key, label, icon }) => {
+              {CONNECTOR_META.map(({ key, icon }) => {
                 const on = Boolean(flags?.[key]);
                 return (
                   <div key={key} className={`live-row ${on ? "" : "live-row--off"}`}>
                     <div className="live-row__left">
                       <span className="material-symbols-outlined">{icon}</span>
-                      <span>{label}</span>
+                      <span>{t(`settings.connectors.${key}`)}</span>
                     </div>
                     <div
                       className={`live-row__status ${on ? "live-row__status--on" : "live-row__status--off"}`}
                     >
                       <span className={`live-dot ${on ? "live-dot--on" : ""}`} />
-                      <span>{on ? "live" : "inactive"}</span>
+                      <span>{on ? t("settings.live") : t("settings.inactive")}</span>
                     </div>
                   </div>
                 );
@@ -111,7 +230,7 @@ export function SettingsPanel({ settings, onSave, onClose }: Props) {
 
         <footer className="settings-panel__footer">
           <button type="button" className="btn btn-ghost" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -121,7 +240,7 @@ export function SettingsPanel({ settings, onSave, onClose }: Props) {
               onClose();
             }}
           >
-            Save
+            {t("common.save")}
           </button>
         </footer>
       </div>

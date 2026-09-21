@@ -7,6 +7,7 @@ import {
   readProbeHealth,
   type SchedulerSignal,
 } from "./scheduler.js";
+import { InMemorySchedulerStateStore, NoopTickLock } from "./scheduler-state.js";
 import type { CapabilityResult } from "./capabilities/types.js";
 import { PlaybookSchema, type Playbook } from "./types.js";
 
@@ -228,5 +229,117 @@ describe("OperatorScheduler cron", () => {
       type: "cron.tick",
       payload: { playbookId: "morning-brief", expression: "0 8 * * *" },
     });
+  });
+});
+
+describe("OperatorScheduler durability", () => {
+  it("with an injected in-memory store still fires a due cron once and records it", async () => {
+    const store = new InMemorySchedulerStateStore();
+    const emitted: SchedulerSignal[] = [];
+    const now = new Date("2026-01-01T08:00:30.000Z");
+    const scheduler = new OperatorScheduler({
+      listPlaybooks: () => [cronPlaybook],
+      emit: async (signal) => {
+        emitted.push(signal);
+      },
+      runProbe: async () => healthy,
+      now: () => now,
+      timeZone: "UTC",
+      state: store,
+      lock: new NoopTickLock(),
+    });
+
+    await scheduler.tick();
+    await scheduler.tick();
+
+    expect(emitted).toHaveLength(1);
+    expect(await store.getLastCronRun("morning-brief:0 8 * * *")).toBe(now.getTime());
+  });
+
+  it("does not re-fire a cron whose last run is already in the store", async () => {
+    const store = new InMemorySchedulerStateStore();
+    await store.setLastCronRun("morning-brief:0 8 * * *", new Date("2026-01-01T08:00:05.000Z").getTime());
+    const emitted: SchedulerSignal[] = [];
+    const scheduler = new OperatorScheduler({
+      listPlaybooks: () => [cronPlaybook],
+      emit: async (signal) => {
+        emitted.push(signal);
+      },
+      runProbe: async () => healthy,
+      now: () => new Date("2026-01-01T08:00:30.000Z"),
+      timeZone: "UTC",
+      state: store,
+    });
+
+    await scheduler.tick();
+
+    expect(emitted).toEqual([]);
+  });
+
+  it("does not re-alert a probe already marked unhealthy in the store", async () => {
+    const store = new InMemorySchedulerStateStore();
+    await store.setProbeUnhealthy("deploy-sentinel:deploy.health", true);
+    const emitted: SchedulerSignal[] = [];
+    const scheduler = new OperatorScheduler({
+      listPlaybooks: () => [probePlaybook],
+      emit: async (signal) => {
+        emitted.push(signal);
+      },
+      runProbe: async () => down,
+      now: () => new Date("2026-01-01T09:00:00.000Z"),
+      timeZone: "UTC",
+      state: store,
+    });
+
+    await scheduler.tick();
+
+    expect(emitted).toEqual([]);
+  });
+
+  it("skips the tick when the lock is not acquired", async () => {
+    const emitted: SchedulerSignal[] = [];
+    const runProbe = vi.fn(async () => down);
+    const release = vi.fn(async () => undefined);
+    const scheduler = new OperatorScheduler({
+      listPlaybooks: () => [cronPlaybook, probePlaybook],
+      emit: async (signal) => {
+        emitted.push(signal);
+      },
+      runProbe,
+      now: () => new Date("2026-01-01T08:00:30.000Z"),
+      timeZone: "UTC",
+      lock: {
+        async tryAcquire() {
+          return false;
+        },
+        release,
+      },
+    });
+
+    await scheduler.tick();
+
+    expect(emitted).toEqual([]);
+    expect(runProbe).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it("releases the lock when a tick throws", async () => {
+    const lock = {
+      tryAcquire: vi.fn(async () => true),
+      release: vi.fn(async () => undefined),
+    };
+    const scheduler = new OperatorScheduler({
+      listPlaybooks: () => {
+        throw new Error("playbooks unavailable");
+      },
+      emit: async () => undefined,
+      runProbe: async () => healthy,
+      now: () => new Date("2026-01-01T08:00:30.000Z"),
+      timeZone: "UTC",
+      lock,
+    });
+
+    await expect(scheduler.tick()).rejects.toThrow("playbooks unavailable");
+    expect(lock.release).toHaveBeenCalledOnce();
   });
 });

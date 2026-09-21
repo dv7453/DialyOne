@@ -1,6 +1,12 @@
 import { CronExpressionParser } from "cron-parser";
 
 import type { CapabilityResult } from "./capabilities/types.js";
+import {
+  InMemorySchedulerStateStore,
+  NoopTickLock,
+  type SchedulerStateStore,
+  type TickLock,
+} from "./scheduler-state.js";
 import type { Playbook } from "./types.js";
 
 export const SCHEDULER_SOURCE = "scheduler";
@@ -111,6 +117,8 @@ export type OperatorSchedulerDeps = {
   /** IANA zone for cron expressions; defaults to DIALY_TZ, then TZ. */
   timeZone?: string;
   onError?: (message: string, meta: Record<string, unknown>) => void;
+  state?: SchedulerStateStore;
+  lock?: TickLock;
 };
 
 export const DEFAULT_TICK_MS = 15_000;
@@ -118,16 +126,16 @@ export const DEFAULT_TICK_MS = 15_000;
 export class OperatorScheduler {
   private readonly now: () => Date;
   private readonly timeZone: string | undefined;
+  private readonly state: SchedulerStateStore;
+  private readonly lock: TickLock;
   private timer: ReturnType<typeof setInterval> | undefined;
   private ticking = false;
-
-  private readonly lastCronRun = new Map<string, number>();
-  private readonly lastProbeRun = new Map<string, number>();
-  private readonly probeUnhealthy = new Map<string, boolean>();
 
   constructor(private readonly deps: OperatorSchedulerDeps) {
     this.now = deps.now ?? (() => new Date());
     this.timeZone = deps.timeZone ?? operatorTimeZone();
+    this.state = deps.state ?? new InMemorySchedulerStateStore();
+    this.lock = deps.lock ?? new NoopTickLock();
   }
 
   start(intervalMs: number = DEFAULT_TICK_MS): void {
@@ -151,24 +159,34 @@ export class OperatorScheduler {
   }
 
   async tick(): Promise<void> {
+    // In-process re-entrancy is cheaper than a lock round-trip.
     if (this.ticking) {
       return;
     }
 
     this.ticking = true;
     try {
-      for (const playbook of this.deps.listPlaybooks()) {
-        if (!playbook.enabled) {
-          continue;
-        }
+      const acquired = await this.lock.tryAcquire();
+      if (!acquired) {
+        return;
+      }
 
-        for (const trigger of playbook.triggers) {
-          if (trigger.type === "cron") {
-            await this.runCron(playbook, trigger.expression);
-          } else if (trigger.type === "probe") {
-            await this.runProbe(playbook, trigger.every, trigger.capability);
+      try {
+        for (const playbook of this.deps.listPlaybooks()) {
+          if (!playbook.enabled) {
+            continue;
+          }
+
+          for (const trigger of playbook.triggers) {
+            if (trigger.type === "cron") {
+              await this.runCron(playbook, trigger.expression);
+            } else if (trigger.type === "probe") {
+              await this.runProbe(playbook, trigger.every, trigger.capability);
+            }
           }
         }
+      } finally {
+        await this.lock.release();
       }
     } finally {
       this.ticking = false;
@@ -178,11 +196,11 @@ export class OperatorScheduler {
   private async runCron(playbook: Playbook, expression: string): Promise<void> {
     const key = `${playbook.id}:${expression}`;
     const now = this.now();
-    if (!isCronDue(expression, now, this.lastCronRun.get(key), this.timeZone)) {
+    if (!isCronDue(expression, now, await this.state.getLastCronRun(key), this.timeZone)) {
       return;
     }
 
-    this.lastCronRun.set(key, now.getTime());
+    await this.state.setLastCronRun(key, now.getTime());
     await this.emit({
       id: `scheduler-cron-${playbook.id}-${now.getTime()}`,
       source: SCHEDULER_SOURCE,
@@ -205,12 +223,12 @@ export class OperatorScheduler {
 
     const key = `${playbook.id}:${capability}`;
     const now = this.now();
-    const last = this.lastProbeRun.get(key);
+    const last = await this.state.getLastProbeRun(key);
     if (last !== undefined && now.getTime() - last < intervalMs) {
       return;
     }
 
-    this.lastProbeRun.set(key, now.getTime());
+    await this.state.setLastProbeRun(key, now.getTime());
 
     let result: CapabilityResult;
     try {
@@ -230,8 +248,8 @@ export class OperatorScheduler {
     }
 
     const { healthy, reason } = readProbeHealth(result);
-    const wasUnhealthy = this.probeUnhealthy.get(key) ?? false;
-    this.probeUnhealthy.set(key, !healthy);
+    const wasUnhealthy = (await this.state.getProbeUnhealthy(key)) ?? false;
+    await this.state.setProbeUnhealthy(key, !healthy);
 
     // Edge-triggered: a service that stays down for an hour raises one signal,
     // not one per probe interval.

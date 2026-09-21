@@ -60,6 +60,7 @@ import type { IPermissionChecker, IPermissionClassifier } from "./permission.js"
 import type { ITurnRepo } from "./repo.js";
 import { HotStream } from "./stream.js";
 import type { IToolRegistry, RuntimeTool, SyncRuntimeTool } from "./tool-registry.js";
+import { safeObserve } from "../../observability/index.js";
 
 type TEvent = z.infer<typeof TurnEvent>;
 
@@ -126,6 +127,21 @@ export class TurnRuntime implements ITurnRuntime {
     }
 
     async createTurn(input: CreateTurnInput): Promise<string> {
+        return safeObserve(
+            {
+                name: "dialy.turn.create",
+                sessionId: input.sessionId ?? undefined,
+                input: input.input,
+            },
+            async (obs) => {
+                const turnId = await this.createTurnUntraced(input);
+                obs.update({ output: { turnId } });
+                return turnId;
+            },
+        );
+    }
+
+    private async createTurnUntraced(input: CreateTurnInput): Promise<string> {
         const resolved = await this.agentResolver.resolve(input.agent);
         const turnId = await this.idGenerator.next();
         // Inherit the heavy snapshot fields (system prompt + tools) when they
@@ -324,12 +340,29 @@ export class TurnRuntime implements ITurnRuntime {
             turnEventBus: this.turnEventBus,
         });
         try {
-            return await withUseCase(
+            return await safeObserve(
                 {
-                    ...analytics,
-                    agentName: definition.agent.resolved.agentId,
+                    name: "dialy.turn",
+                    asType: "agent",
+                    sessionId: definition.sessionId ?? undefined,
+                    turnId,
+                    input: definition.input,
+                    metadata: {
+                        agentId: definition.agent.resolved.agentId,
+                        useCase: analytics.useCase,
+                    },
                 },
-                () => run.run(input),
+                async (obs) => {
+                    const outcome = await withUseCase(
+                        {
+                            ...analytics,
+                            agentName: definition.agent.resolved.agentId,
+                        },
+                        () => run.run(input),
+                    );
+                    obs.update({ output: summarizeTurnOutcome(outcome) });
+                    return outcome;
+                },
             );
         } finally {
             // Drain any queued commits before withLock releases the turn, so
@@ -634,6 +667,26 @@ class TurnAdvance {
                         ? {}
                         : { metadata: input.metadata }),
                 });
+                await safeObserve(
+                    {
+                        name: "dialy.permission.resolved",
+                        sessionId: this.definition.sessionId ?? undefined,
+                        turnId: this.turnId,
+                        input: {
+                            toolCallId: input.toolCallId,
+                            decision: input.decision,
+                            source: "human",
+                        },
+                    },
+                    async (obs) => {
+                        obs.update({
+                            output: {
+                                toolCallId: input.toolCallId,
+                                decision: input.decision,
+                            },
+                        });
+                    },
+                );
                 if (input.decision === "deny") {
                     await this.append(
                         runtimeResultEvent(this.turnId, this.now(), tc, {
@@ -761,13 +814,35 @@ class TurnAdvance {
                 continue;
             }
             try {
-                const check = await this.permissionChecker.check({
-                    turnId: this.turnId,
-                    toolCallId: tc.toolCallId,
-                    toolId: tool.descriptor.toolId,
-                    toolName: tc.toolName,
-                    input: tc.input,
-                });
+                const check = await safeObserve(
+                    {
+                        name: "dialy.permission.check",
+                        sessionId: this.definition.sessionId ?? undefined,
+                        turnId: this.turnId,
+                        input: {
+                            toolCallId: tc.toolCallId,
+                            toolName: tc.toolName,
+                            args: tc.input,
+                        },
+                    },
+                    async (obs) => {
+                        const result = await this.permissionChecker.check({
+                            turnId: this.turnId,
+                            toolCallId: tc.toolCallId,
+                            toolId: tool.descriptor.toolId,
+                            toolName: tc.toolName,
+                            input: tc.input,
+                        });
+                        obs.update({
+                            output: {
+                                required: result.required,
+                                toolCallId: tc.toolCallId,
+                                toolName: tc.toolName,
+                            },
+                        });
+                        return result;
+                    },
+                );
                 if (!check.required) {
                     this.checkerAllowed.add(tc.toolCallId);
                 } else {
@@ -1019,23 +1094,46 @@ class TurnAdvance {
         // invite the model to retry it (§21.4).
         let settled: z.infer<typeof ToolResultData>;
         try {
-            const result = await syncTool.execute(tc.input, {
-                turnId: this.turnId,
-                sessionId: this.definition.sessionId,
-                toolCallId: tc.toolCallId,
-                signal: this.signal,
-                reportProgress: async (progress) => {
-                    await this.append({
-                        type: "tool_progress",
-                        turnId: this.turnId,
-                        ts: this.now(),
+            const result = await safeObserve(
+                {
+                    name: "dialy.tool",
+                    asType: "tool",
+                    sessionId: this.definition.sessionId ?? undefined,
+                    turnId: this.turnId,
+                    input: {
                         toolCallId: tc.toolCallId,
-                        source: "sync",
-                        progress,
-                    });
+                        toolName: tc.toolName,
+                        args: tc.input,
+                    },
                 },
-            });
-            settled = ToolResultData.parse(result);
+                async (obs) => {
+                    const executed = await syncTool.execute(tc.input, {
+                        turnId: this.turnId,
+                        sessionId: this.definition.sessionId,
+                        toolCallId: tc.toolCallId,
+                        signal: this.signal,
+                        reportProgress: async (progress) => {
+                            await this.append({
+                                type: "tool_progress",
+                                turnId: this.turnId,
+                                ts: this.now(),
+                                toolCallId: tc.toolCallId,
+                                source: "sync",
+                                progress,
+                            });
+                        },
+                    });
+                    const parsed = ToolResultData.parse(executed);
+                    obs.update({
+                        output: {
+                            isError: parsed.isError,
+                            output: parsed.output,
+                        },
+                    });
+                    return parsed;
+                },
+            );
+            settled = result;
         } catch (error) {
             if (this.signal.aborted) {
                 await this.append(
@@ -1292,47 +1390,73 @@ class TurnAdvance {
         let completion: Extract<LlmStreamEvent, { type: "completed" }> | null =
             null;
         try {
-            for await (const event of this.model.stream({
-                systemPrompt: composed.systemPrompt,
-                messages: composed.messages,
-                tools: composed.tools,
-                parameters: composed.parameters,
-                signal: this.signal,
-            })) {
-                switch (event.type) {
-                    case "text_delta":
-                        this.pushDelta({
-                            type: "text_delta",
-                            turnId: this.turnId,
-                            modelCallIndex: index,
-                            delta: event.delta,
-                        });
-                        break;
-                    case "reasoning_delta":
-                        this.pushDelta({
-                            type: "reasoning_delta",
-                            turnId: this.turnId,
-                            modelCallIndex: index,
-                            delta: event.delta,
-                        });
-                        break;
-                    case "step_event":
-                        await this.append({
-                            type: "model_step_event",
-                            turnId: this.turnId,
-                            ts: this.now(),
-                            modelCallIndex: index,
-                            event: event.event,
-                        });
-                        break;
-                    case "completed":
-                        completion = event;
-                        break;
-                }
-            }
-            if (!completion) {
-                throw new Error("model stream ended without a completed response");
-            }
+            completion = await safeObserve(
+                {
+                    name: "dialy.model",
+                    asType: "generation",
+                    sessionId: this.definition.sessionId ?? undefined,
+                    turnId: this.turnId,
+                    model: this.resolvedAgent.model.model,
+                    input: {
+                        modelCallIndex: index,
+                        provider: this.resolvedAgent.model.provider,
+                        model: this.resolvedAgent.model.model,
+                        systemPrompt: composed.systemPrompt,
+                        messages: composed.messages,
+                    },
+                },
+                async (obs) => {
+                    let done: Extract<LlmStreamEvent, { type: "completed" }> | null =
+                        null;
+                    for await (const event of this.model.stream({
+                        systemPrompt: composed.systemPrompt,
+                        messages: composed.messages,
+                        tools: composed.tools,
+                        parameters: composed.parameters,
+                        signal: this.signal,
+                    })) {
+                        switch (event.type) {
+                            case "text_delta":
+                                this.pushDelta({
+                                    type: "text_delta",
+                                    turnId: this.turnId,
+                                    modelCallIndex: index,
+                                    delta: event.delta,
+                                });
+                                break;
+                            case "reasoning_delta":
+                                this.pushDelta({
+                                    type: "reasoning_delta",
+                                    turnId: this.turnId,
+                                    modelCallIndex: index,
+                                    delta: event.delta,
+                                });
+                                break;
+                            case "step_event":
+                                await this.append({
+                                    type: "model_step_event",
+                                    turnId: this.turnId,
+                                    ts: this.now(),
+                                    modelCallIndex: index,
+                                    event: event.event,
+                                });
+                                break;
+                            case "completed":
+                                done = event;
+                                break;
+                        }
+                    }
+                    if (!done) {
+                        throw new Error("model stream ended without a completed response");
+                    }
+                    obs.update({
+                        output: done.message,
+                        usageDetails: usageDetails(done.usage),
+                        model: this.resolvedAgent.model.model,
+                    });
+                    return done;
+                },
+            );
         } catch (error) {
             if (this.signal.aborted) {
                 await this.append(
@@ -1357,6 +1481,10 @@ class TurnAdvance {
                 usage: this.state.usage,
             });
             return { status: "failed", error: message, usage: this.state.usage };
+        }
+
+        if (!completion) {
+            throw new Error("model stream ended without a completed response");
         }
 
         await this.append({
@@ -1486,6 +1614,47 @@ function errorMessage(error: unknown): string {
         details.push(responseBody.slice(0, 2000));
     }
     return details.length > 0 ? `${message} [${details.join(" — ")}]` : message;
+}
+
+function summarizeTurnOutcome(outcome: TurnOutcome): Record<string, unknown> {
+    if (outcome.status === "completed") {
+        return {
+            status: outcome.status,
+            finishReason: outcome.finishReason,
+            usage: outcome.usage,
+            output: outcome.output,
+        };
+    }
+    if (outcome.status === "suspended") {
+        return {
+            status: outcome.status,
+            pendingPermissions: outcome.pendingPermissions.length,
+            pendingAsyncTools: outcome.pendingAsyncTools.length,
+            usage: outcome.usage,
+        };
+    }
+    if (outcome.status === "failed") {
+        return { status: outcome.status, error: outcome.error, usage: outcome.usage };
+    }
+    return { status: outcome.status, usage: "usage" in outcome ? outcome.usage : undefined };
+}
+
+function usageDetails(usage: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+}): Record<string, number> {
+    const details: Record<string, number> = {};
+    if (typeof usage.inputTokens === "number") {
+        details.input = usage.inputTokens;
+    }
+    if (typeof usage.outputTokens === "number") {
+        details.output = usage.outputTokens;
+    }
+    if (typeof usage.totalTokens === "number") {
+        details.total = usage.totalTokens;
+    }
+    return details;
 }
 
 function outcomeFromTerminal(state: TurnState): TurnOutcome {

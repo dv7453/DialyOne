@@ -7,4 +7,9 @@ export default defineConfig({
     port: 5180,
     host: true,
   },
+  preview: {
+    port: 5180,
+    host: true,
+  },
+  appType: "spa",
 });

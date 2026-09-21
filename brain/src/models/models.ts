@@ -1,5 +1,6 @@
-import { ProviderV4 } from "@ai-sdk/provider";
+import { ProviderV4, type LanguageModelV4 } from "@ai-sdk/provider";
 import { createGateway, generateText, type LanguageModel } from "ai";
+import { applySpendCap } from "../llm/index.js";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -97,7 +98,9 @@ export function createLanguageModel(
     modelId: string,
 ): LanguageModel {
     const model = createProvider(providerConfig).languageModel(modelId);
-    return applyLocalModelSettings(model, providerConfig);
+    return applySpendCap(
+        applyLocalModelSettings(model, providerConfig) as LanguageModelV4,
+    ) as LanguageModel;
 }
 
 export interface ModelCapabilities {

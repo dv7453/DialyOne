@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
+import { withDefaultExpiry } from "./expiry.js";
+
 const ApprovalStatusSchema = z.enum(["pending", "approved", "denied", "expired"]);
 
 export const ApprovalRecordSchema = z.object({
@@ -14,9 +16,17 @@ export const ApprovalRecordSchema = z.object({
   args: z.record(z.string(), z.unknown()).optional(),
   signalId: z.string().min(1).optional(),
   status: ApprovalStatusSchema,
+  // Carried on the record so a client never re-derives it: a UI with a stale copy
+  // of the severity table would render an irreversible filing as routine.
+  severity: z.enum(["reversible", "consequential", "irreversible"]).optional(),
   createdAt: z.string().min(1),
   expiresAt: z.string().min(1).optional(),
   resolvedAt: z.string().min(1).optional(),
+  // Routing keys for a suspended turn. These are not capability arguments —
+  // `args` stays the tool input the human is asked to preview.
+  sessionId: z.string().min(1).optional(),
+  turnId: z.string().min(1).optional(),
+  toolCallId: z.string().min(1).optional(),
 });
 
 export type ApprovalStatus = z.infer<typeof ApprovalStatusSchema>;
@@ -30,6 +40,86 @@ export type CreateApprovalInput = {
   args?: Record<string, unknown>;
   signalId?: string;
   expiresAt?: string;
+  severity?: ApprovalRecord["severity"];
+  sessionId?: string;
+  turnId?: string;
+  toolCallId?: string;
+};
+
+export const TURN_ROUTE_ARG = "__dialyTurnRoute";
+
+export type TurnPermissionRoute = {
+  sessionId?: string;
+  turnId: string;
+  toolCallId: string;
+};
+
+export function turnRouteOf(
+  record: Pick<ApprovalRecord, "sessionId" | "turnId" | "toolCallId">,
+): TurnPermissionRoute | undefined {
+  if (!record.turnId || !record.toolCallId) {
+    return undefined;
+  }
+  return {
+    turnId: record.turnId,
+    toolCallId: record.toolCallId,
+    ...(record.sessionId ? { sessionId: record.sessionId } : {}),
+  };
+}
+
+export function encodeTurnRouteArgs(
+  args: Record<string, unknown> | undefined,
+  route: TurnPermissionRoute | undefined,
+): Record<string, unknown> {
+  const base = args ?? {};
+  if (!route) {
+    return base;
+  }
+  return { ...base, [TURN_ROUTE_ARG]: route };
+}
+
+export function decodeTurnRouteArgs(payload: Record<string, unknown> | undefined): {
+  args?: Record<string, unknown>;
+  route?: TurnPermissionRoute;
+} {
+  if (!payload) {
+    return {};
+  }
+  if (!(TURN_ROUTE_ARG in payload)) {
+    return { args: payload };
+  }
+  const rest = { ...payload };
+  delete rest[TURN_ROUTE_ARG];
+  const route = parseTurnRoute(payload[TURN_ROUTE_ARG]);
+  return {
+    ...(Object.keys(rest).length > 0 ? { args: rest } : {}),
+    ...(route ? { route } : {}),
+  };
+}
+
+function parseTurnRoute(raw: unknown): TurnPermissionRoute | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const rec = raw as Record<string, unknown>;
+  if (typeof rec.turnId !== "string" || rec.turnId === "" || typeof rec.toolCallId !== "string" || rec.toolCallId === "") {
+    return undefined;
+  }
+  return {
+    turnId: rec.turnId,
+    toolCallId: rec.toolCallId,
+    ...(typeof rec.sessionId === "string" && rec.sessionId ? { sessionId: rec.sessionId } : {}),
+  };
+}
+
+/**
+ * `transitioned` is false when the approval was already decided, so a replayed
+ * click returns the same record as the original. Only a true transition is a
+ * mandate to execute; acting on a replay sends the mail or files the return twice.
+ */
+export type ApprovalTransition = {
+  record: ApprovalRecord;
+  transitioned: boolean;
 };
 
 export interface ApprovalsStore {
@@ -37,6 +127,28 @@ export interface ApprovalsStore {
   get(id: string): Promise<ApprovalRecord | undefined>;
   listPending(): Promise<ApprovalRecord[]>;
   resolve(id: string, resolution: ApprovalResolution): Promise<ApprovalRecord | undefined>;
+  resolveTransition(id: string, resolution: ApprovalResolution): Promise<ApprovalTransition | undefined>;
+}
+
+export type ApprovalExpiryStore = ApprovalsStore & {
+  expireDue(): Promise<ApprovalRecord[]>;
+};
+
+export function isApprovalOverdue(record: ApprovalRecord, nowIso: string): boolean {
+  if (record.status !== "pending" || !record.expiresAt) {
+    return false;
+  }
+  return !(Date.parse(record.expiresAt) > Date.parse(nowIso));
+}
+
+export function expireIfDue(record: ApprovalRecord, nowIso: string): ApprovalRecord {
+  if (record.status === "expired" && !record.resolvedAt) {
+    return ApprovalRecordSchema.parse({ ...record, resolvedAt: nowIso });
+  }
+  if (!isApprovalOverdue(record, nowIso)) {
+    return record;
+  }
+  return ApprovalRecordSchema.parse({ ...record, status: "expired", resolvedAt: nowIso });
 }
 
 export type ApprovalsStoreOptions = {
@@ -55,11 +167,12 @@ export class InMemoryApprovalsStore implements ApprovalsStore {
   }
 
   async create(input: CreateApprovalInput): Promise<ApprovalRecord> {
+    const createdAt = this.now();
     const record = ApprovalRecordSchema.parse({
-      ...input,
+      ...withDefaultExpiry(input, createdAt),
       id: this.createId(),
       status: "pending",
-      createdAt: this.now(),
+      createdAt,
     });
     this.records.set(record.id, record);
     return record;
@@ -79,9 +192,19 @@ export class InMemoryApprovalsStore implements ApprovalsStore {
   }
 
   async resolve(id: string, resolution: ApprovalResolution): Promise<ApprovalRecord | undefined> {
+    return (await this.resolveTransition(id, resolution))?.record;
+  }
+
+  async resolveTransition(
+    id: string,
+    resolution: ApprovalResolution,
+  ): Promise<ApprovalTransition | undefined> {
     const record = await this.get(id);
-    if (!record || record.status !== "pending") {
-      return record;
+    if (!record) {
+      return undefined;
+    }
+    if (record.status !== "pending") {
+      return { record, transitioned: false };
     }
 
     const resolved = ApprovalRecordSchema.parse({
@@ -90,7 +213,20 @@ export class InMemoryApprovalsStore implements ApprovalsStore {
       resolvedAt: this.now(),
     });
     this.records.set(id, resolved);
-    return resolved;
+    return { record: resolved, transitioned: true };
+  }
+
+  async expireDue(): Promise<ApprovalRecord[]> {
+    const now = this.now();
+    const newly: ApprovalRecord[] = [];
+    for (const record of this.records.values()) {
+      const expired = expireIfDue(record, now);
+      if (expired !== record) {
+        this.records.set(record.id, expired);
+        newly.push(expired);
+      }
+    }
+    return newly;
   }
 
   private withExpiry(record: ApprovalRecord): ApprovalRecord {
@@ -119,11 +255,12 @@ export class FileApprovalsStore implements ApprovalsStore {
 
   async create(input: CreateApprovalInput): Promise<ApprovalRecord> {
     const records = this.readRecords().map((record) => this.withExpiry(record));
+    const createdAt = this.now();
     const record = ApprovalRecordSchema.parse({
-      ...input,
+      ...withDefaultExpiry(input, createdAt),
       id: this.createId(),
       status: "pending",
-      createdAt: this.now(),
+      createdAt,
     });
     records.push(record);
     this.writeRecords(records);
@@ -143,6 +280,13 @@ export class FileApprovalsStore implements ApprovalsStore {
   }
 
   async resolve(id: string, resolution: ApprovalResolution): Promise<ApprovalRecord | undefined> {
+    return (await this.resolveTransition(id, resolution))?.record;
+  }
+
+  async resolveTransition(
+    id: string,
+    resolution: ApprovalResolution,
+  ): Promise<ApprovalTransition | undefined> {
     const records = this.readRecords().map((record) => this.withExpiry(record));
     const index = records.findIndex((record) => record.id === id);
     if (index === -1) {
@@ -153,7 +297,7 @@ export class FileApprovalsStore implements ApprovalsStore {
     const record = records[index];
     if (record.status !== "pending") {
       this.writeRecords(records);
-      return record;
+      return { record, transitioned: false };
     }
 
     const resolved = ApprovalRecordSchema.parse({
@@ -163,7 +307,25 @@ export class FileApprovalsStore implements ApprovalsStore {
     });
     records[index] = resolved;
     this.writeRecords(records);
-    return resolved;
+    return { record: resolved, transitioned: true };
+  }
+
+  async expireDue(): Promise<ApprovalRecord[]> {
+    const now = this.now();
+    const records = this.readRecords();
+    const newly: ApprovalRecord[] = [];
+    const next = records.map((record) => {
+      const expired = expireIfDue(record, now);
+      if (expired !== record) {
+        newly.push(expired);
+        return expired;
+      }
+      return record;
+    });
+    if (newly.length > 0) {
+      this.writeRecords(next);
+    }
+    return newly;
   }
 
   private readRecords(): ApprovalRecord[] {

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { VoicePhase } from "../types";
 
 type Props = {
@@ -5,20 +6,16 @@ type Props = {
   onStop: () => void;
 };
 
-const LABEL: Record<Exclude<VoicePhase, "idle">, string> = {
-  listening: "Listening…",
-  thinking: "Thinking…",
-  speaking: "Speaking…",
-};
-
 export function VoiceBar({ phase, onStop }: Props) {
+  const { t } = useTranslation();
   if (phase === "idle") return null;
+
   return (
     <div className="voice-bar">
       <div className={`voice-bar__pulse voice-bar__pulse--${phase}`} aria-hidden />
-      <span className="voice-bar__label">{LABEL[phase]}</span>
+      <span className="voice-bar__label">{t(`voice.${phase}`)}</span>
       <button type="button" className="btn btn-ghost voice-bar__stop" onClick={onStop}>
-        Stop
+        {t("voice.stop")}
       </button>
     </div>
   );

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { ResolvedApproval } from "../types";
 import { capabilityLabel } from "../lib/brain";
 
@@ -6,6 +7,7 @@ type Props = {
 };
 
 export function ResolvedApprovalCard({ item }: Props) {
+  const { t } = useTranslation();
   const label = capabilityLabel(item.approval.capability);
   const approved = item.decision === "approve";
   const detail = item.summary ? ` · ${item.summary}` : "";
@@ -14,7 +16,9 @@ export function ResolvedApprovalCard({ item }: Props) {
     <div
       className={`approval-resolved ${approved ? "approval-resolved--approved" : "approval-resolved--denied"}`}
     >
-      {approved ? `Approved — ${label}${detail}` : `Denied — ${label}`}
+      {approved
+        ? t("approvals.approvedLine", { label, detail })
+        : t("approvals.deniedLine", { label })}
     </div>
   );
 }

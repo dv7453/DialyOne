@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 type Props = {
   value: string;
   onChange: (v: string) => void;
@@ -17,6 +19,8 @@ export function Composer({
   disabled,
   canAttach = true,
 }: Props) {
+  const { t } = useTranslation();
+
   return (
     <form
       className="composer"
@@ -31,14 +35,14 @@ export function Composer({
           className="composer__icon"
           onClick={onAttach}
           disabled={disabled || !canAttach}
-          aria-label="Attach"
+          aria-label={t("composer.attach")}
         >
           <span className="material-symbols-outlined">add</span>
         </button>
         <textarea
           className="composer__input"
           rows={1}
-          placeholder="Message Dialy…"
+          placeholder={t("composer.placeholder")}
           value={value}
           disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
@@ -54,7 +58,7 @@ export function Composer({
           className="composer__icon"
           onClick={onMic}
           disabled={disabled}
-          aria-label="Voice"
+          aria-label={t("composer.voice")}
         >
           <span className="material-symbols-outlined">mic</span>
         </button>
@@ -62,7 +66,7 @@ export function Composer({
           type="submit"
           className="composer__send"
           disabled={disabled || !value.trim()}
-          aria-label="Send"
+          aria-label={t("composer.send")}
         >
           <span className="material-symbols-outlined">arrow_upward</span>
         </button>

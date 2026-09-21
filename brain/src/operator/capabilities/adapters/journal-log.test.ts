@@ -66,6 +66,9 @@ describe("JournalLogAdapter", () => {
         append() {
           throw new Error("disk full");
         },
+        async list() {
+          return [];
+        },
       },
       { now },
     );

@@ -5,13 +5,23 @@
  *
  * Quit Electron; phone on same Wi‑Fi hits http://<lan-ip>:8787/health
  */
+import { getDb } from "../db/client.js";
+import { createPgSpendStore } from "../db/spend-store.js";
+import { configureLlmBudget } from "../llm/index.js";
+import { InMemorySpendStore } from "../operator/spend-store.js";
 import { bootDialyHost } from "./boot.js";
 import { createHostHttpServer, listenHostHttp } from "./http.js";
 import { hostLog } from "./logger.js";
+import { shutdownOperator } from "./operator-boot.js";
 import { hostState } from "./state.js";
 
 async function main(): Promise<void> {
     hostState.startedAt = Date.now();
+    // An in-memory ceiling resets on every deploy and is per-instance, so a
+    // restart loop could spend the daily cap many times over.
+    configureLlmBudget({
+        store: process.env.DATABASE_URL ? createPgSpendStore(getDb()) : new InMemorySpendStore(),
+    });
     const server = createHostHttpServer();
 
     // Listen early so /health can answer during long boot (503 until bootOk).
@@ -29,6 +39,9 @@ async function main(): Promise<void> {
 
     const shutdown = (signal: string) => {
         hostLog.info(`shutdown ${signal}`);
+        // Flush buffered traces before exit, but never let that hold the process
+        // past the 2s deadline Render gives us before SIGKILL.
+        void shutdownOperator().catch(() => undefined);
         server.close(() => process.exit(0));
         setTimeout(() => process.exit(0), 2000).unref();
     };

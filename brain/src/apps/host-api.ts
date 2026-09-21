@@ -1,7 +1,10 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import type express from 'express';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { generateText, type ModelMessage } from 'ai';
+import { getCurrentUserId } from '../auth/context.js';
+import { applySpendCap, isSpendExceededError, runWithBudgetUser } from '../llm/index.js';
 import type { RowboatAppManifest } from '@x/shared/dist/rowboat-app.js';
 import { registerHostApiRoute, sendError, readBody } from './server.js';
 import {
@@ -325,8 +328,10 @@ async function handleLlmGenerate(
     llmInFlight.set(slug, inFlight + 1);
     try {
         const providerConfig = await resolveProviderConfig(resolved.provider);
-        const model = createProvider(providerConfig).languageModel(resolved.model);
-        const result = await withUseCase({ useCase: 'app_llm_generate', subUseCase: slug }, () => generateText({
+        const model = applySpendCap(
+            createProvider(providerConfig).languageModel(resolved.model) as LanguageModelV4,
+        );
+        const generate = () => withUseCase({ useCase: 'app_llm_generate', subUseCase: slug }, () => generateText({
             model,
             ...(system ? { instructions: system } : {}),
             ...(rawMessages ? { messages: rawMessages as ModelMessage[], allowSystemInMessages: true } : { prompt: prompt as string }),
@@ -334,6 +339,8 @@ async function handleLlmGenerate(
             maxOutputTokens,
             abortSignal: abort.signal,
         }));
+        const userId = getCurrentUserId();
+        const result = userId ? await runWithBudgetUser(userId, generate) : await generate();
         captureLlmUsage({ useCase: 'app_llm_generate', subUseCase: slug, model: resolved.model, provider: resolved.provider, usage: result.usage });
         res.json({
             text: result.text,
@@ -344,6 +351,10 @@ async function handleLlmGenerate(
             },
         });
     } catch (e) {
+        if (isSpendExceededError(e)) {
+            sendError(res, 403, 'spend_cap_reached', "You've reached today's AI spend limit. It resets at midnight UTC.");
+            return;
+        }
         sendError(res, 503, 'llm_not_configured', annotateAuthError(e instanceof Error ? e.message : String(e)));
     } finally {
         clearTimeout(llmTimeout);

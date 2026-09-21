@@ -3,6 +3,7 @@ import { decide } from "./policy.js";
 import { triageSignal } from "./triage.js";
 import type { JournalWriter } from "./journal.js";
 import type { ActionRequest, Playbook, PolicyDecision, Signal, TriageResult } from "./types.js";
+import { safeObserve } from "../observability/index.js";
 
 export interface EngineCapabilityRegistry {
   has?(capability: string): boolean;
@@ -44,6 +45,41 @@ async function appendJournal(deps: EngineDeps, entry: Parameters<JournalWriter["
 }
 
 export async function processSignal(signal: Signal, playbooks: Playbook[], deps: EngineDeps): Promise<EngineResult> {
+  return safeObserve(
+    {
+      name: "dialy.operator.signal",
+      asType: "span",
+      input: {
+        signalId: signal.id,
+        source: signal.source,
+        type: signal.type,
+        payload: signal.payload,
+      },
+      metadata: { signalId: signal.id },
+    },
+    async (obs) => {
+      const result = await runProcessSignal(signal, playbooks, deps);
+      obs.update({
+        output: {
+          signalId: result.signalId,
+          matches: result.matches.map((match) => ({
+            playbookId: match.playbookId,
+            triage: match.triage,
+            decision: { class: match.decision.class, reason: match.decision.reason },
+            actions: match.actions.map((action) => ({
+              id: action.id,
+              capability: action.capability,
+              mode: action.mode,
+            })),
+          })),
+        },
+      });
+      return result;
+    },
+  );
+}
+
+async function runProcessSignal(signal: Signal, playbooks: Playbook[], deps: EngineDeps): Promise<EngineResult> {
   const createActionId = deps.createActionId ?? makeDefaultActionId();
   const matches = matchPlaybooks(signal, playbooks);
   const results: EngineMatchResult[] = [];
