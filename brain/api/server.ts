@@ -95,6 +95,7 @@ const server = http.createServer((req, res) => {
                 models: configPresent('models.json'),
                 composio: configPresent('composio.json'),
                 elevenlabs: configPresent('elevenlabs.json'),
+                sarvam: configPresent('sarvam.json'),
                 deepgram: configPresent('deepgram.json'),
                 exaSearch: configPresent('exa-search.json'),
             },

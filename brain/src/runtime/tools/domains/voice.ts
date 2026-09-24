@@ -1,7 +1,5 @@
-// Builtin tools: voice domain. Exposes the app's own speech stack (the same
-// ElevenLabs/Deepgram credentials — or the signed-in Rowboat proxy — that
-// power voice mode) as assistant tools, so agents and Rowboat Apps can
-// speak and listen without any new API keys.
+// Builtin tools: voice domain. Same per-stage pipeline as in-app voice
+// (ElevenLabs Scribe STT → LLM → Sarvam TTS, with Deepgram / ElevenLabs fallbacks).
 
 import { z } from "zod";
 import * as files from "../../../filesystem/files.js";
@@ -18,23 +16,25 @@ const MAX_TRANSCRIBE_BYTES = 100 * 1024 * 1024;
 export const voiceTools: z.infer<typeof BuiltinToolsSchema> = {
     'text-to-speech': {
         permission: "file-boundary",
-        description: "Convert text to natural spoken audio (the app's own voice stack — no API keys needed) and save it as an .mp3 file. Returns the saved path. Use for narration, audio versions of notes/summaries, or dialogue segments. Pass different ElevenLabs voiceIds across calls to voice different speakers (e.g. a two-host podcast).",
+        description: "Convert text to spoken audio via Dialy's voice pipeline (Sarvam TTS, ElevenLabs fallback) and save it. Returns the saved path. Use for narration or audio versions of notes. Pass an ElevenLabs voiceId only when the Sarvam stage is not configured.",
         inputSchema: z.object({
             text: z.string().min(1).max(MAX_TTS_TEXT_CHARS)
                 .describe(`The text to speak (max ${MAX_TTS_TEXT_CHARS} chars — synthesize long content one segment per call)`),
             outputPath: z.string().optional()
-                .describe("Where to save the .mp3 (workspace-relative or absolute). Default: media/tts/tts-<timestamp>.mp3"),
+                .describe("Where to save the audio (workspace-relative or absolute). Default: media/tts/tts-<timestamp>."),
             voiceId: z.string().optional()
-                .describe("ElevenLabs voice id (e.g. pNInz6obpgDQGcFmaJgB male, 21m00Tcm4TlvDq8ikWAM female). Omit for the app's default voice."),
+                .describe("ElevenLabs voice id when falling back to ElevenLabs TTS. Omit for Sarvam / default voice."),
+            languageCode: z.string().optional()
+                .describe("Sarvam target language (en-IN, hi-IN, gu-IN). Defaults to config / en-IN."),
         }),
-        execute: async ({ text, outputPath, voiceId }: { text: string; outputPath?: string; voiceId?: string }) => {
+        execute: async ({ text, outputPath, voiceId, languageCode }: { text: string; outputPath?: string; voiceId?: string; languageCode?: string }) => {
             try {
                 const { synthesizeSpeech } = await import("../../../voice/voice.js");
-                // Produced artifact → quality tier (voice mode keeps flash).
-                const { audioBase64, mimeType } = await synthesizeSpeech(text, { voiceId, modelId: 'eleven_turbo_v2_5' });
+                const { audioBase64, mimeType } = await synthesizeSpeech(text, { voiceId, modelId: 'eleven_turbo_v2_5', languageCode });
                 const buffer = Buffer.from(audioBase64, 'base64');
+                const ext = mimeType.includes('wav') ? 'wav' : 'mp3';
                 const target = outputPath
-                    || `media/tts/tts-${new Date().toISOString().replace(/[:.]/g, '-')}.mp3`;
+                    || `media/tts/tts-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
                 const result = await files.writeBuffer(target, buffer);
                 return { success: true, path: result.path, resolvedPath: result.resolvedPath, mimeType, bytes: buffer.length };
             } catch (e) {
@@ -44,7 +44,7 @@ export const voiceTools: z.infer<typeof BuiltinToolsSchema> = {
     },
     'transcribe-audio': {
         permission: "file-boundary",
-        description: "Transcribe an audio file to text using the app's speech-to-text (same credentials as voice mode — no API keys needed). Handles common formats (wav, mp3, ogg/opus, webm). Use for voice memos, recordings, or audio produced by text-to-speech.",
+        description: "Transcribe an audio file to text via Dialy's STT stage (ElevenLabs Scribe, Deepgram fallback). Handles common formats (wav, mp3, ogg/opus, webm).",
         inputSchema: z.object({
             path: z.string().describe("The audio file to transcribe (workspace-relative or absolute)"),
         }),

@@ -22,6 +22,7 @@ import {
 import { isBrainHttpError } from "./lib/errors";
 import { hasCompletedFirstRun, markFirstRunComplete } from "./lib/first-run";
 import { i18n, setAppLocale } from "./lib/i18n";
+import { voiceLanguageCode } from "./lib/locales";
 import { pushAppPath, readAppLocation, replaceAppPath, type AppView } from "./lib/routing";
 import {
   clearAuthSettings,
@@ -418,7 +419,11 @@ export default function App() {
   async function playTts(text: string) {
     try {
       setVoicePhase("speaking");
-      const { audioBase64, mimeType } = await speakVoice(settings, text.slice(0, 4000));
+      const { audioBase64, mimeType } = await speakVoice(
+        settings,
+        text.slice(0, 4000),
+        voiceLanguageCode(settings.locale),
+      );
       const bytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
       const url = URL.createObjectURL(new Blob([bytes], { type: mimeType || "audio/mpeg" }));
       const audio = new Audio(url);

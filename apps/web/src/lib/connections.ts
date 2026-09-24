@@ -42,6 +42,8 @@ const ADAPTER_CONNECTOR: Record<string, ConnectorKey> = {
 };
 
 export function connectorForCapability(capability: string): ConnectorKey | null {
+  if (capability.startsWith("composio.gmail")) return "mail";
+  if (capability.startsWith("composio.github")) return "github";
   for (const [prefix, key] of CAPABILITY_CONNECTOR) {
     if (capability.startsWith(prefix)) return key;
   }

@@ -62,7 +62,9 @@ WorkDir is always `~/.rowboat`. Edit via **Electron → Settings / Connect Accou
 | `composio.json` | Toolkits / Spike C | `{ "apiKey": "..." }` → `backend.composio.dev` with `x-api-key` |
 | `channels.json` | Telegram (Spike B) | `telegram.enabled: true`, non-empty `botToken`, optional `allowFrom` chat ids |
 | OAuth / Google | Gmail sync later | Follow repo `google-setup.md`; not needed for Phase 0 / Spike A |
-| `elevenlabs.json` / `deepgram.json` | Voice later | Skip for 0→1 messaging |
+| `elevenlabs.json` | STT (Scribe) | `{ "apiKey": "..." }` |
+| `sarvam.json` | TTS | `{ "apiKey": "...", "languageCode": "en-IN" }` |
+| `deepgram.json` | STT fallback | Skip unless ElevenLabs is unset |
 | `exa-search.json` | Optional web search | Skip unless testing search |
 
 ### `models.json` shape (v2)

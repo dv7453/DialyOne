@@ -4,6 +4,7 @@ import {
     ADAPTER_FLAG_CAPABILITIES,
     adapterFlagsFromStatuses,
     assertAdapterFlagCapabilities,
+    connectorInventoryFromAdapters,
     type OperatorCapabilityStatus,
 } from "./operator-boot.js";
 import { CapabilityRegistry } from "../operator/capabilities/registry.js";
@@ -74,5 +75,32 @@ describe("assertAdapterFlagCapabilities", () => {
             registry.register(new NamedAdapter(`adapter-for-${capability}`, [capability]));
         }
         expect(() => assertAdapterFlagCapabilities(registry)).not.toThrow();
+    });
+});
+
+describe("connectorInventoryFromAdapters", () => {
+    it("reports the 67-toolkit Composio catalog plus direct Render/GitHub/Mail/Telegram", () => {
+        const inventory = connectorInventoryFromAdapters(
+            statuses([
+                { id: "composio-catalog", capabilities: ["composio.execute", "composio.gmail"], available: true },
+                { id: "deploy-render", capabilities: ["deploy.health"], available: true },
+                { id: "code-github", capabilities: ["code.draft_pr"], available: false },
+                { id: "mail-agentmail", capabilities: ["mail.send"], available: true },
+            ]),
+            true,
+            ["gmail"],
+        );
+        expect(inventory.approvalGated).toBe(true);
+        expect(inventory.composio.catalogCount).toBe(67);
+        expect(inventory.composio.available).toBe(true);
+        expect(inventory.composio.slugs).toContain("gmail");
+        expect(inventory.composio.connectedToolkits).toEqual(["gmail"]);
+        expect(inventory.direct).toEqual([
+            { id: "deploy-render", name: "Render", available: true },
+            { id: "code-github", name: "GitHub", available: false },
+            { id: "mail-agentmail", name: "Mail", available: true },
+            { id: "telegram", name: "Telegram", available: true },
+        ]);
+        expect(inventory.highlights).toEqual(["Render", "GitHub", "Gmail", "Telegram"]);
     });
 });

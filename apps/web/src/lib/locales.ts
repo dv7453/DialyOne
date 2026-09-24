@@ -19,6 +19,12 @@ export function isLocaleCode(value: unknown): value is LocaleCode {
   return typeof value === "string" && LOCALES.some((locale) => locale.code === value);
 }
 
+export function voiceLanguageCode(locale: string): string {
+  if (locale === "gu") return "gu-IN";
+  if (locale === "hi") return "hi-IN";
+  return "en-IN";
+}
+
 export function applyDocumentLang(locale: string): void {
   document.documentElement.lang = locale;
 }

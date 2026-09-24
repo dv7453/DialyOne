@@ -236,7 +236,7 @@ const definitions: SkillDefinition[] = [
   {
     id: "voice",
     title: "Voice — Speak & Transcribe",
-    summary: "Turn text into spoken audio (text-to-speech saves an .mp3 in the workspace; two voices available for dialogue/podcast-style segments) and transcribe audio files to text (transcribe-audio). Uses the app's built-in voice stack — no API keys needed.",
+    summary: "Turn text into spoken audio (Sarvam TTS, ElevenLabs fallback) and transcribe audio files (ElevenLabs Scribe STT, Deepgram fallback).",
     content: voiceSkill,
     tools: ["text-to-speech", "transcribe-audio"],
   },

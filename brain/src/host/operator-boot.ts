@@ -15,9 +15,12 @@ import { startApprovalReaper } from "../operator/approval-reaper.js";
 import { shutdownLangfuse } from "../observability/index.js";
 import { CalendarAdapter } from "../operator/capabilities/adapters/calendar.js";
 import { GitHubCodeAdapter } from "../operator/capabilities/adapters/code-github.js";
+import { ComposioCatalogAdapter, COMPOSIO_CATALOG_COUNT } from "../operator/capabilities/adapters/composio-catalog.js";
 import { RenderDeployAdapter } from "../operator/capabilities/adapters/deploy-render.js";
 import { JournalLogAdapter } from "../operator/capabilities/adapters/journal-log.js";
 import { MailAdapter } from "../operator/capabilities/adapters/mail-agentmail.js";
+import { CURATED_TOOLKITS } from "@x/shared/dist/composio.js";
+import { composioAccountsRepo } from "../composio/repo.js";
 import { ConsoleNotifySink, NotifyAdapter, TelegramNotifySink } from "../operator/capabilities/adapters/notify.js";
 import { CapabilityRegistry } from "../operator/capabilities/registry.js";
 import { processSignal } from "../operator/engine.js";
@@ -147,6 +150,7 @@ function registerCapabilities(): void {
         .register(new MailAdapter())
         .register(new CalendarAdapter())
         .register(new JournalLogAdapter(journal))
+        .register(new ComposioCatalogAdapter())
         .register(new NotifyAdapter([new ConsoleNotifySink(), telegramNotify]));
 }
 
@@ -381,6 +385,51 @@ export type OperatorAdapterFlags = {
     telegram: boolean;
 };
 
+export type ConnectorInventory = {
+    approvalGated: true;
+    composio: {
+        catalogCount: number;
+        available: boolean;
+        slugs: string[];
+        connectedToolkits: string[];
+    };
+    direct: Array<{ id: string; name: string; available: boolean }>;
+    highlights: string[];
+};
+
+const DIRECT_CONNECTORS: ReadonlyArray<{ id: string; name: string }> = [
+    { id: "deploy-render", name: "Render" },
+    { id: "code-github", name: "GitHub" },
+    { id: "mail-agentmail", name: "Mail" },
+    { id: "telegram", name: "Telegram" },
+];
+
+export function connectorInventoryFromAdapters(
+    adapters: OperatorCapabilityStatus[],
+    telegramAvailable: boolean,
+    connectedToolkits: string[] = [],
+): ConnectorInventory {
+    const composio = adapters.find((adapter) => adapter.id === "composio-catalog");
+    return {
+        approvalGated: true,
+        composio: {
+            catalogCount: COMPOSIO_CATALOG_COUNT,
+            available: composio?.available ?? false,
+            slugs: CURATED_TOOLKITS.map((toolkit) => toolkit.slug),
+            connectedToolkits,
+        },
+        direct: DIRECT_CONNECTORS.map((entry) => ({
+            id: entry.id,
+            name: entry.name,
+            available:
+                entry.id === "telegram"
+                    ? telegramAvailable
+                    : (adapters.find((adapter) => adapter.id === entry.id)?.available ?? false),
+        })),
+        highlights: ["Render", "GitHub", "Gmail", "Telegram"],
+    };
+}
+
 /** Flags are keyed by capability, not adapter id, so a rename cannot report "disconnected". */
 export const ADAPTER_FLAG_CAPABILITIES: Record<Exclude<keyof OperatorAdapterFlags, "telegram">, string> = {
     render: "deploy.health",
@@ -427,6 +476,7 @@ export function adapterFlagsFromStatuses(
 export async function getOperatorCapabilities(): Promise<{
     adapters: OperatorCapabilityStatus[];
     flags: OperatorAdapterFlags;
+    connectors: ConnectorInventory;
 }> {
     if (!booted) bootOperator();
     const adapters: OperatorCapabilityStatus[] = [];
@@ -437,8 +487,17 @@ export async function getOperatorCapabilities(): Promise<{
             available: await adapter.isAvailable(),
         });
     }
-    const flags = adapterFlagsFromStatuses(adapters, await telegramNotify.isAvailable());
-    return { adapters, flags };
+    const telegramAvailable = await telegramNotify.isAvailable();
+    const flags = adapterFlagsFromStatuses(adapters, telegramAvailable);
+    return {
+        adapters,
+        flags,
+        connectors: connectorInventoryFromAdapters(
+            adapters,
+            telegramAvailable,
+            composioAccountsRepo.getConnectedToolkits(),
+        ),
+    };
 }
 
 export async function handleOperatorSignal(

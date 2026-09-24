@@ -17,6 +17,7 @@ export const DEFAULT_CAPABILITY_SEVERITY: Readonly<Record<string, Severity>> = {
   "deploy.health": "consequential",
   "deploy.logs": "consequential",
   "deploy.restart": "consequential",
+  "composio.execute": "consequential",
 };
 
 export const DEFAULT_SEVERITY_PREFIXES: ReadonlyArray<readonly [string, Severity]> = [
@@ -24,6 +25,7 @@ export const DEFAULT_SEVERITY_PREFIXES: ReadonlyArray<readonly [string, Severity
   ["notify.", "reversible"],
   ["deploy.", "consequential"],
   ["code.", "consequential"],
+  ["composio.", "consequential"],
   ["payment.", "irreversible"],
   ["money.", "irreversible"],
   ["bank.", "irreversible"],

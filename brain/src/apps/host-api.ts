@@ -400,11 +400,11 @@ async function handleVoiceTts(
         return sendError(res, 400, 'too_large', `"text" exceeds ${MAX_TTS_TEXT_CHARS} chars — synthesize in segments`);
     }
     const voiceId = typeof body.voiceId === 'string' && body.voiceId ? body.voiceId : undefined;
+    const languageCode = typeof body.languageCode === 'string' && body.languageCode ? body.languageCode : undefined;
 
     if (!acquireVoiceSlot(slug, res)) return;
     try {
-        // Apps produce durable audio — use the quality tier, not voice-mode's flash.
-        const { audioBase64, mimeType } = await synthesizeSpeech(text, { voiceId, modelId: 'eleven_turbo_v2_5' });
+        const { audioBase64, mimeType } = await synthesizeSpeech(text, { voiceId, modelId: 'eleven_turbo_v2_5', languageCode });
         res.json({ audioBase64, mimeType });
     } catch (e) {
         sendError(res, 503, 'voice_error', e instanceof Error ? e.message : String(e));

@@ -47,7 +47,7 @@ import {
     resolveOperatorApproval,
 } from "./operator-boot.js";
 import { answerHostAskHuman, parseHostChatRequest, runHostChat, streamHostChat } from "./chat.js";
-import { synthesizeSpeech, transcribeAudio } from "../voice/voice.js";
+import { getVoicePipeline, synthesizeSpeech, transcribeAudio } from "../voice/voice.js";
 import { clientIpFromForwarded, readTrustedProxyHops } from "./client-ip.js";
 import {
     mintVoiceAccessToken,
@@ -75,6 +75,7 @@ const PLANNED = {
     "POST /v1/operator/webhook/agentmail": "AgentMail inbound mail (Svix HMAC, no bearer token)",
     "GET /v1/operator/playbooks": "list loaded operator playbooks",
     "GET /v1/operator/capabilities": "adapter availability flags (no secrets)",
+    "GET /v1/connectors": "67 Composio catalog + direct Render/GitHub/Mail/Telegram (approval-gated)",
     "GET /v1/operator/approvals": "list pending approval actions",
     "POST /v1/operator/approvals/resolve": "approve or deny a pending action",
     "GET /v1/operator/journal": "recent operator journal entries (newest first)",
@@ -83,8 +84,8 @@ const PLANNED = {
     "POST /v1/chat/stream": "session chat SSE (delta / ask_human / done / error)",
     "POST /v1/chat/answer": "answer ask_human mid-turn",
     "POST /v1/voice/token": "mint a LiveKit join token for the call UI",
-    "POST /v1/voice/transcribe": "Deepgram STT (audioBase64)",
-    "POST /v1/voice/speak": "ElevenLabs TTS (text → audioBase64)",
+    "POST /v1/voice/transcribe": "ElevenLabs Scribe STT (Deepgram fallback)",
+    "POST /v1/voice/speak": "Sarvam TTS (ElevenLabs fallback)",
     "GET /v1/graph": "not implemented",
     "GET /v1/connections": "not implemented",
 } as const;
@@ -679,7 +680,7 @@ export function createHostHttpServer(deps: HostHttpDeps = {}): http.Server {
                 channels = { error: "channels_unavailable" };
             }
             try {
-                const caps = await getOperatorCapabilities();
+                const [caps, voice] = await Promise.all([getOperatorCapabilities(), getVoicePipeline()]);
                 json(res, 200, {
                     configDir: CONFIG_DIR,
                     bootOk: hostState.bootOk,
@@ -709,12 +710,15 @@ export function createHostHttpServer(deps: HostHttpDeps = {}): http.Server {
                         playbookErrors: getOperatorPlaybookErrors().length,
                     },
                     operatorAdapters: caps.flags,
+                    connectors: caps.connectors,
+                    voice,
                     present: {
                         models: configPresent("models.json"),
-                        composio: configPresent("composio.json"),
+                        composio: configPresent("composio.json") || Boolean(process.env.COMPOSIO_API_KEY),
                         channels: configPresent("channels.json"),
-                        elevenlabs: configPresent("elevenlabs.json"),
-                        deepgram: configPresent("deepgram.json"),
+                        elevenlabs: configPresent("elevenlabs.json") || Boolean(process.env.ELEVENLABS_API_KEY),
+                        sarvam: configPresent("sarvam.json") || Boolean(process.env.SARVAM_API_KEY),
+                        deepgram: configPresent("deepgram.json") || Boolean(process.env.DEEPGRAM_API_KEY),
                         exaSearch: configPresent("exa-search.json"),
                         mcp: configPresent("mcp.json"),
                     },
@@ -735,6 +739,19 @@ export function createHostHttpServer(deps: HostHttpDeps = {}): http.Server {
             } catch (error) {
                 json(res, 500, {
                     error: "operator_capabilities_failed",
+                    message: error instanceof Error ? error.message : String(error),
+                });
+            }
+            return;
+        }
+
+        if (method === "GET" && pathname === "/v1/connectors") {
+            try {
+                const caps = await getOperatorCapabilities();
+                json(res, 200, caps.connectors);
+            } catch (error) {
+                json(res, 500, {
+                    error: "connectors_failed",
                     message: error instanceof Error ? error.message : String(error),
                 });
             }
@@ -971,9 +988,14 @@ export function createHostHttpServer(deps: HostHttpDeps = {}): http.Server {
                     typeof record.voiceId === "string" && record.voiceId
                         ? record.voiceId
                         : undefined;
+                const languageCode =
+                    typeof record.languageCode === "string" && record.languageCode
+                        ? record.languageCode
+                        : undefined;
                 const { audioBase64, mimeType } = await synthesizeSpeech(text, {
                     voiceId,
                     modelId: "eleven_turbo_v2_5",
+                    languageCode,
                 });
                 json(res, 200, { audioBase64, mimeType });
             } catch (error) {

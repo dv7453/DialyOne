@@ -20,6 +20,8 @@ describe("classifySeverity", () => {
     expect(classifySeverity("code.merge")).toBe("consequential");
     expect(classifySeverity("deploy.restart")).toBe("consequential");
     expect(classifySeverity("deploy.rollback")).toBe("consequential");
+    expect(classifySeverity("composio.execute")).toBe("consequential");
+    expect(classifySeverity("composio.gmail")).toBe("consequential");
     expect(classifySeverity("payment.send")).toBe("irreversible");
     expect(classifySeverity("gst.file")).toBe("irreversible");
     expect(classifySeverity("delete.inbox")).toBe("irreversible");

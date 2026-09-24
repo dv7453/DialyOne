@@ -198,11 +198,12 @@ export async function transcribeVoice(
 export async function speakVoice(
   settings: WebSettings,
   text: string,
+  languageCode?: string,
 ): Promise<{ audioBase64: string; mimeType: string }> {
   return request(settings, "/v1/voice/speak", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, languageCode }),
   });
 }
 
