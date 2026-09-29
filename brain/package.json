@@ -18,6 +18,7 @@
     "start:lan": "BRAIN_HOST=0.0.0.0 node dist/host/main.js",
     "start:local": "BRAIN_HOST=127.0.0.1 node dist/host/main.js",
     "stress": "node dist/host/stress-cli.js",
+    "eval": "npm run build && node dist/eval/cli.js",
     "scenarios": "npm run build && node dist/operator/testing/scenarios-cli.js",
     "watchdog": "node dist/watchdog/main.js",
     "db:generate": "drizzle-kit generate",

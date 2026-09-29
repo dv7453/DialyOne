@@ -52,6 +52,22 @@ Logs: `~/.rowboat/logs/brain.jsonl`. launchd / caffeinate: [`deploy/README.md`](
 
 Empty `allowFrom` accepts first chats and tells you the chat id to lock later.
 
+## Eval harness (text agent + optional voice bakeoff)
+
+Scoring layer, not a second agent. Default path uses **fixture replies + a scripted judge** — no API keys, no paid models.
+
+```bash
+cd brain
+npm run eval                 # 16 tasks, good scripted agent; trusted metric must be 1
+npm run eval -- --agent bad  # same tasks, bad replies; trusted metric must be 0
+npm run eval -- --compare    # prompt/model-change shape: bad → good delta
+npm run eval -- --voice      # 20 utterances, ElevenLabs vs Deepgram STT, Sarvam vs ElevenLabs TTS (stubs)
+```
+
+Trusted metric: **successAtLatency** — fact-complete, not hallucinated, under 8s. An LLM-as-judge (optional `--judge grok` with `XAI_API_KEY`) is logged beside that number and **cannot override it**. Disagreement is a first-class field because judges lie (sycophancy, verbosity, bad JSON).
+
+Live Dialy chat: `npm run eval -- --live http://127.0.0.1:8787` (needs a running host + model key — not required for CI).
+
 ## Golden config checklist (`~/.rowboat/config/`)
 
 WorkDir is always `~/.rowboat`. Edit via **Electron → Settings / Connect Accounts**, or write JSON by hand. Do not commit these files.
