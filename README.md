@@ -148,9 +148,17 @@ cd brain && npm run scenarios
 
 ---
 
+## How this was checked
+
+The numbers below are the automated gate. They are not the only check, and they are not a substitute for using the product.
+
+I ran Dialy myself. I talked to the live model, then read the reply against what it had actually retrieved — the mail, the log line, the calendar fact, the number in front of it — instead of trusting a confident paragraph. If retrieval did not contain a send, a restart, a signature, or a meeting, and the model still claimed one, that was a miss. I did the same pass on the operator path: a signal comes in, the playbook picks an action, and the consequential step waits for approval instead of disappearing into the model. The harness exists so that bar cannot go green in CI while the behavior I already rejected by hand sneaks back in.
+
+The 16/16 figure is the fixture suite. The thing I am willing to stand behind is the running system I reviewed: model output, retrieval, and the approval gate, not a table by itself.
+
 ## Benchmarks
 
-Measured in this repo with **no paid APIs**. The text numbers are the fixture agents (known-good and known-bad replies), which is what CI asserts. They are not a claim about a particular hosted model.
+The table is what CI asserts, with **no paid APIs**. The rows are fixture agents (known-good and known-bad replies), not a leaderboard for one hosted model. I used them to lock the scoring rules after the manual review above, so a later prompt or model change has something to regress against.
 
 **Text eval** (`npm run eval`, scripted judge, latency budget 8000 ms)
 
